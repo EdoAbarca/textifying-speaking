@@ -1,0 +1,53 @@
+version: '3.8'
+services:
+  mongo:
+    image: mongo:4.4
+    container_name: mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./data:/data/db
+    networks:
+      - textify-speaking-network
+    restart: always
+  backend:
+    image: docker.io/eddindocker/textify-speaking-nest-backend
+    container_name: textify-speaking-nest-backend
+    ports:
+      - "3000:3000"
+    networks:
+      - textify-speaking-network
+    depends_on:
+      - mongo
+  frontend:
+    image: docker.io/eddindocker/textify-speaking-react-frontend
+    container_name: textify-speaking-react-frontend
+    ports:
+      - "5173:5173"
+    networks:
+      - textify-speaking-network
+    depends_on:
+      - backend
+      - mongo
+  whisper:
+    image: docker.io/eddindocker/textify-speaking-whisper
+    container_name: textify-speaking-whisper
+    ports:
+      - "8001:8001"
+    networks:
+      - textify-speaking-network
+  summarizer:
+    image: docker.io/eddindocker/textify-speaking-summarizer
+    container_name: textify-speaking-summarizer
+    ports:
+      - "8002:8002"
+    networks:
+      - textify-speaking-network
+    
+  
+networks:
+  textify-speaking-network:
+    driver: bridge
+volumes:
+  data:
+    driver: local
