@@ -1,5 +1,4 @@
 import { Link, useNavigate } from "react-router-dom";
-//import Navbar from "../components/Navbar";
 
 function NotFound() {
   const navigate = useNavigate();
@@ -13,7 +12,7 @@ function NotFound() {
               <h1 className="text-6xl font-medium py-8">No encontrado.</h1>
               <p className="text-2xl pb-8 px-12 font-medium">¡Ups! La página solicitada no existe.</p>
               <button className="bg-gradient-to-r from-purple-400 to-blue-500 hover:from-purple-500 hover:to-blue-600 text-white font-semibold px-6 py-3 rounded-2xl mr-6">
-                <Link to="/">Home</Link>
+                <Link to="/">Inicio</Link>
               </button>
               <button onClick={() => navigate(-1)} className="font-semibold px-6 py-3 rounded-2xl border shadow-lg">
                 Volver
