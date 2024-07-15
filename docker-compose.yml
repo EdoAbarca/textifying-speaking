@@ -1,4 +1,4 @@
-version: '3.8'
+#version: '3.8'
 services:
   mongo:
     image: mongo:latest
@@ -9,16 +9,13 @@ services:
       - ./data:/data/db
     networks:
       - textify-speaking-network
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: root #a guardar en .env
-      MONGO_INITDB_ROOT_PASSWORD: example #a guardar en .env
 
   mongo-express:
     image: mongo-express
     container_name: mongo-express
     restart: always
     ports:
-      - 8003:8003
+      - 8081:8081
     environment:
       ME_CONFIG_MONGODB_ADMINUSERNAME: root
       ME_CONFIG_MONGODB_ADMINPASSWORD: example
@@ -26,15 +23,17 @@ services:
     networks:
       - textify-speaking-network
     #restart: always
-  #backend:
-  #  image: docker.io/eddindocker/textify-speaking-nest-backend
-  #  container_name: textify-speaking-nest-backend
-  #  ports:
-  #    - "3000:3000"
-  #  networks:
-  #    - textify-speaking-network
-  #  depends_on:
-  #    - mongo
+
+  backend:
+    image: docker.io/eddindocker/textify-speaking-nest-backend
+    container_name: textify-speaking-nest-backend
+    ports:
+      - "3000:3000"
+    networks:
+      - textify-speaking-network
+    depends_on:
+      - mongo
+
   #frontend:
   #  image: docker.io/eddindocker/textify-speaking-react-frontend
   #  container_name: textify-speaking-react-frontend
@@ -45,21 +44,36 @@ services:
   #  depends_on:
   #    - backend
   #    - mongo
-  #whisper:
-  #  image: docker.io/eddindocker/textify-speaking-whisper
-  #  container_name: textify-speaking-whisper
-  #  ports:
-  #    - "8001:8001"
-  #  networks:
-  #    - textify-speaking-network
-  #summarizer:
-  #  image: docker.io/eddindocker/textify-speaking-summarizer
-  #  container_name: textify-speaking-summarizer
-  #  ports:
-  #    - "8002:8002"
-  #  networks:
-  #    - textify-speaking-network
-    
+  
+  whisper:
+    image: docker.io/eddindocker/textify-speaking-django-whisper
+    container_name: textify-speaking-django-whisper
+    ports:
+      - "8001:8001"
+    networks:
+      - textify-speaking-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+  
+  summarizer:
+    image: docker.io/eddindocker/textify-speaking-django-summarizer
+    container_name: textify-speaking-django-summarizer
+    ports:
+      - "8002:8002"
+    networks:
+      - textify-speaking-network 
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
   
 networks:
   textify-speaking-network:

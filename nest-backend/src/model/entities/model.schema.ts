@@ -1,12 +1,15 @@
-// src/models/model.schema.ts
-import { Schema, Document } from 'mongoose';
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Document } from 'mongoose';
 
-export interface Model extends Document {
+export type ModelDocument = Model & Document;
+
+@Schema()
+export class Model {
+  @Prop({ required: true, unique: true })
   name: string;
+
+  @Prop({ required: true })
   goal: string;
 }
 
-export const ModelSchema = new Schema({
-  name: { type: String, required: true },
-  goal: { type: String, required: true, enum: ['Transcript', 'Summarize'] },
-});
+export const ModelSchema = SchemaFactory.createForClass(Model);

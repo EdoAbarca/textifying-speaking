@@ -8,27 +8,39 @@ import { faFileVideo, faFileAudio } from "@fortawesome/free-solid-svg-icons";
 import { Temporal } from "@js-temporal/polyfill";
 
 function Upload() {
-	const [title, setTitle] = useState("");
-	const [wordCount, setWordCount] = useState(0);
-	const [duration, setDuration] = useState("");
+	//const [wordCount, setWordCount] = useState(0);
+	//const [duration, setDuration] = useState("");
 	const [date, setDate] = useState("");
 	const [time, setTime] = useState("");
+	const [files, setFiles] = useState([]);
+	const [transcriptors, setTranscriptors] = useState([]);
+	const [summarizers, setSummarizers] = useState([]);
+	const [keys, setKeys] = useState([]);
 	const [transcription, setTranscription] = useState(""); //Pasar a array, considerando que pueden haber varios transcriptores
-  const [files, setFiles] = useState([]);
 	const [processStarted, setProcessStarted] = useState(false);
 	const [processFinished, setProcessFinished] = useState(false);
 
-	const handleTitleChange = (event) => {
+	useEffect(() => {
+    fetch(`http://localhost:3000/api/model/transcript`)
+      .then((response) => response.json())
+      .then((data) => setTranscriptors(data))
+      .catch((error) => console.log(error));
+  }, []);
+
+  useEffect(() => {
+    fetch("http://localhost:3000/api/model/summary")
+      .then((response) => response.json())
+      .then((data) => setSummarizers(data))
+      .catch((error) => console.log(error));
+  }, []);
+
+  const handleTitleChange = (event) => {
     const t = event.target.value;
     setTitle(t);
   };
 
-  const handleFileInputChange = (event) => {
-    const files = event.target.files;
-    setFiles(files);
-  };
-
-	const handleKeyChange = (event) => {
+	//A revisar
+  const handleKeyChange = (event) => {
     const id = event.target.id;
     const checked = event.target.checked;
 
@@ -39,10 +51,39 @@ function Upload() {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+	const handleFileInputChange = (event) => {
+    const files = event.target.files;
+    setFiles(files);
+  };
+
+	/**
+	 useEffect(() => {
+    const AI_count = transcriptors.length + summarizers.length;
+    const isFilesEmpty = files.length === 0;
+    const pass = AI_count > 0 && !isFilesEmpty;
+    setFormPass(pass);
+  }, [files, transcriptors, summarizers]); 
+	 */
+
+  async function handleSubmit(event) {
+		const init_time_execution = performance.now();
+		//const finish_time_execution = performance.now();
+
+    event.preventDefault();
+    setProcessStarted(true);
+    const nowDate = Temporal.Now.plainDateISO();
+    const nowTime = Temporal.Now.plainTimeISO();
+    const nowTimeWithoutMiliseconds = nowTime.toString().split(".")[0];
+    setDate(nowDate.toString());
+    setTime(nowTimeWithoutMiliseconds);
     const formData = new FormData();
     formData.append('files', files);
+
+		for (let i = 0; i < files.length; i++) {
+			//Llamar a la API para mandar los archivos a la API para la transcripción
+
+			//Llamar a la API para mandar los archivos a la API para el resumen
+		}
 
     try {
       console.log('Respuesta:', formData);
@@ -75,7 +116,28 @@ function Upload() {
 
               <div className="mb-4">
                 <label className="block text-gray-600">
-                  API keys
+                  Modelos transcriptores
+                </label>
+                {keyOptions.map((option) => (
+                  <div key={option.id}>
+                    <input
+                      type="checkbox"
+                      id={option.id}
+                      name={option.api_key}
+                      value={option}
+                      checked={keys.some(key => key.id.toString() === option.id.toString())}
+                      onChange={handleKeyChange}
+                    />
+                    <label htmlFor={option.id} className="ml-2">
+                      {`${option.api_key.substring(0, 5)}********** (${option.ai.name})`}
+                    </label>
+                  </div>
+                ))}
+              </div>
+							
+							<div className="mb-4">
+                <label className="block text-gray-600">
+                  Modelos de resumen
                 </label>
                 {keyOptions.map((option) => (
                   <div key={option.id}>

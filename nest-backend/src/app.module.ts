@@ -10,7 +10,7 @@ import { ModelModule } from './model/model.module';
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    MongooseModule.forRoot(process.env.MONGO_CONNECTION_STRING),
+    MongooseModule.forRoot(process.env.MONGODB_URI),
     MethodsModule,
     UserModule,
     ModelModule,

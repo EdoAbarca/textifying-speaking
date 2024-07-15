@@ -5,6 +5,7 @@ import Dashboard from './views/Dashboard';
 import FAQ from './views/FAQ';
 import Upload from './views/Upload';
 import NotFound from './views/NotFound';
+import AddKey from './views/AddKey';
 
 function App() {
   return (
@@ -14,10 +15,11 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/faq" element={<FAQ />} />
         <Route path="/upload" element={<Upload />} />
+        <Route path="/add_key" element={<AddKey />} />
         <Route path='*' element={<NotFound />} />
       </Routes>
     </Router>
   ); 
 }
-//<Route path="/keys" element={<Keys />} />
+
 export default App
