@@ -1,4 +1,4 @@
-#version: '3.8'
+
 services:
   mongo:
     image: mongo:latest
@@ -9,6 +9,7 @@ services:
       - ./data:/data/db
     networks:
       - textify-speaking-network
+    restart: always
 
   mongo-express:
     image: mongo-express
@@ -22,13 +23,12 @@ services:
       ME_CONFIG_MONGODB_URL: mongodb://root:example@mongo:27017/
     networks:
       - textify-speaking-network
-    #restart: always
 
   backend:
     image: docker.io/eddindocker/textify-speaking-nest-backend
     container_name: textify-speaking-nest-backend
     ports:
-      - "3000:3000"
+      - "3001:3001"
     networks:
       - textify-speaking-network
     depends_on:

@@ -39,9 +39,9 @@ WORKDIR /app
 RUN python3 -m pip install --upgrade pip
 COPY requirements.txt requirements.txt
 RUN pip3 install -r requirements.txt
-RUN pip3 install --upgrade numpy
+#RUN pip3 install --upgrade numpy
 #RUN pip3 install torch torchvision torchaudio -f https://download.pytorch.org/whl/cu121/torch_stable.html
-RUN pip3 install torch torchvision torchaudio
+#RUN pip3 install torch torchvision torchaudio
 
 RUN rm -rf Python-3.11.5 && \
     apt-get purge -y --auto-remove \

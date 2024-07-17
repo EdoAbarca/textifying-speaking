@@ -34,11 +34,11 @@ export class ModelService implements OnModuleInit {
     return createdModel.save();
   }
 
-  async findAll(): Promise<ModelDocument[]> {
+  findAll(): Promise<ModelDocument[]> {
     return this.modelModel.find().exec();
   }
 
-  async findOne(id: string): Promise<ModelDocument> {
+  findOne(id: string): Promise<ModelDocument> {
     return this.modelModel.findById(id).exec();
   }
 
