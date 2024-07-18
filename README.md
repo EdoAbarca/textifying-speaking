@@ -2,25 +2,24 @@
 
 ## Descripción
 
-Textifying Speaking es una aplicación web que automatiza la transcripción de archivos de audio y video, y ofrece la opción de generar resúmenes de las transcripciones obtenidas. Esta herramienta es ideal para estudiantes, profesionales y cualquier persona que necesite convertir contenido multimedia en texto y obtener resúmenes de estos.
+*Textifying Speaking* es una aplicación web que automatiza la transcripción de archivos de audio y video, y ofrece la opción de generar resúmenes de las transcripciones obtenidas. Esta herramienta es ideal para estudiantes, profesionales y cualquier persona que necesite convertir contenido multimedia en texto y obtener resúmenes de estos.
 
 ## Características distintivas
 
 - **Soporte multilingüe:** Si bien la aplicación está diseñada para manejar archivos en español e inglés, es capaz de soportar sobre 40 idiomas, ofreciendo una amplia cobertura para usuarios globales.
 - **Transcripción:** Utiliza el modelo `whisper-v3-large` para ofrecer transcripciones precisas y rápidas.
 - **Resúmenes:** Utiliza el modelo `mT5_multilingual_XLSum` para generar resúmenes concisos.
-- **Integridad de la información:** Construida con Vite React y Tailwind CSS para una experiencia de usuario rápida y responsiva.
-- **Información adicional a ser informada**
+- **Confidencialidad de la información:** Los modelos mencionados son llamados desde *Hugging Face* mediante *Inference API*, por lo que no se auto-entrenan con la información que procesan.
+- **Información adicional que, de corresponder, será presentada**
 
 ## Tecnologías utilizadas
 
 - **Frontend:**
-  - Vite React
+  - Vite (React.js, JavaScript + SWC)
   - Tailwind CSS
 
 - **Backend:**
-  - Nest.js
-  - Mongoose
+  - Nest.js (Mongoose)
   - MongoDB
   - Django
 
