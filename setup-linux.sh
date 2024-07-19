@@ -3,14 +3,14 @@
 # Define the list of service and folder name pairs
 declare -A services
 services=(
-  ["service1"]="folder1"
-  ["service2"]="folder2"
-  ["service3"]="folder3"
-  ["service4"]="folder4"
+  ["frontend"]="react-frontend"
+  ["backend"]="nest-backend"
+  ["whisper"]="django-whisper"
+  ["summarizer"]="django-summarizer"
 )
 
 # Define the database services to exclude from stopping
-db_services=("database_service1" "database_service2")
+db_services=("mongo" "mongo-express")
 
 # Stop and remove non-database containers
 echo "Stopping and removing non-database containers..."

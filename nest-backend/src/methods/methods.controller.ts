@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete } from '@nestjs/common';
 import { MethodsService } from './methods.service';
 import { CreateTranscriptionDto } from 'src/transcription/dto/create-transcription.dto';
 import { CreateKeyDto } from 'src/key/dto/create-key.dto';
+import { HttpStatus, HttpCode } from '@nestjs/common';
 
 
 @Controller('methods')
@@ -15,7 +16,7 @@ export class MethodsController {
 
   @Get('summarizer-models')
   getSummarizerModels() {
-    return this.methodsService.getSummarizerModels
+    return this.methodsService.getSummarizerModels();
   }
 
   @Get('transcriptions')
@@ -43,12 +44,14 @@ export class MethodsController {
     return this.methodsService.createTranscription(createTranscriptionDto);
   }
 
-  @Delete('remove-transcription/:id')
+  @Delete('delete-transcription/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
   removeTranscription(@Param('id') id: string) {
     return this.methodsService.removeTranscription(id);
   }
 
-  @Delete('remove-key/:id')
+  @Delete('delete-key/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
   removeKey(@Param('id') id: string) {
     return this.methodsService.removeKey(id);
   }

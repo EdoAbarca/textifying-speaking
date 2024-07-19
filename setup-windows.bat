@@ -2,10 +2,10 @@
 setlocal enabledelayedexpansion
 
 :: Define the list of service and folder name pairs
-set "services=service1 folder1 service2 folder2 service3 folder3 service4 folder4"
+set "services=frontend react-frontend backend nest-backend whisper django-whisper summarizer django-summarizer"
 
 :: Define the database services to exclude from stopping
-set "db_services=database_service1 database_service2"
+set "db_services=mongo mongo-express"
 
 :: Convert services string to an array
 set i=0
