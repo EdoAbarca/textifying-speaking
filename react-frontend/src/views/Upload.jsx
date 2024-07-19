@@ -21,23 +21,18 @@ function Upload() {
 	const [processFinished, setProcessFinished] = useState(false);
 
 	useEffect(() => {
-    fetch(`http://localhost:3000/api/model/transcript`)
+    fetch(`http://localhost:3001/model/transcript`)
       .then((response) => response.json())
       .then((data) => setTranscriptors(data))
       .catch((error) => console.log(error));
   }, []);
 
   useEffect(() => {
-    fetch("http://localhost:3000/api/model/summary")
+    fetch("http://localhost:3001/model/summary")
       .then((response) => response.json())
       .then((data) => setSummarizers(data))
       .catch((error) => console.log(error));
   }, []);
-
-  const handleTitleChange = (event) => {
-    const t = event.target.value;
-    setTitle(t);
-  };
 
 	//A revisar
   const handleKeyChange = (event) => {

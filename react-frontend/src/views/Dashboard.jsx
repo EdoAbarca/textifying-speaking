@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faListUl } from '@fortawesome/free-solid-svg-icons';
+import { faListUl, faEye, faEyeSlash, faTrash } from '@fortawesome/free-solid-svg-icons';
+import axios from 'axios';
 
 const Dashboard = () => {
 	const [selectedView, setSelectedView] = useState('Transcripts');
@@ -161,18 +162,72 @@ const Analytics = () => {
 	return (
 		<div>
 			<h1 className="text-2xl font-semibold">Analytics</h1>
-			<p className="text-center text-gray-500">View your analytics here.</p>
+			<p className="text-center text-gray-500">View your analytics here (T.B.A.).</p>
 			{/* Add analytics content here */}
 		</div>
 	);
 };
 
 const APIs = () => {
+	const [apiKeys, setApiKeys] = useState([
+		{ key: 'api-key-t', service: 'Transcriptors' },
+		{ key: 'api-key-s', service: 'Summarizers' },
+	]);
+	const [showKey, setShowKey] = useState(Array(apiKeys.length).fill(false));
+
+	const handleToggleShowKey = (index) => {
+		const newShowKey = [...showKey];
+		newShowKey[index] = !newShowKey[index];
+		setShowKey(newShowKey);
+	};
+
+	const handleDeleteKey = (index) => {
+		const confirmDelete = window.confirm('Are you sure you want to delete this API key?');
+		if (confirmDelete) {
+			const newApiKeys = [...apiKeys];
+			newApiKeys.splice(index, 1);
+			setApiKeys(newApiKeys);
+		}
+	};
+
 	return (
 		<div>
 			<h1 className="text-2xl font-semibold">API keys</h1>
 			<p className="text-center text-gray-500">Manage your API keys here.</p>
-			{/* Add API keys content here */}
+			<div className="flex justify-between items-center my-4">
+				<button className="px-4 py-2 bg-blue-500 text-white rounded">Add API Key</button>
+				<select className="px-4 py-2 border rounded">
+					<option value="Transcriptors">Transcriptors</option>
+					<option value="Summarizers">Summarizers</option>
+				</select>
+			</div>
+			<table className="min-w-full bg-white">
+				<thead>
+					<tr>
+						<th className="py-2 px-4 border-b">Key</th>
+						<th className="py-2 px-4 border-b">Service</th>
+						<th className="py-2 px-4 border-b">Options</th>
+					</tr>
+				</thead>
+				<tbody>
+					{apiKeys.map((apiKey, index) => (
+						<tr key={index}>
+							<td className="py-2 px-4 border-b">
+								{showKey[index] ? apiKey.key : '**********'}
+							</td>
+							<td className="py-2 px-4 border-b">{apiKey.service}</td>
+							<td className="py-2 px-4 border-b">
+								<button onClick={() => handleToggleShowKey(index)} className="mr-2">
+									<FontAwesomeIcon icon={showKey[index] ? faEyeSlash : faEye} />
+								</button>
+								<button onClick={() => handleDeleteKey(index)}>
+									<FontAwesomeIcon icon={faTrash} />
+								</button>
+							</td>
+						</tr>
+					))}
+				</tbody>
+			</table>
 		</div>
 	);
 };
