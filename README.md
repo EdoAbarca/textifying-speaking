@@ -1,5 +1,9 @@
 # Textifying Speaking
 
+## Advertencia
+
+Esta aplicación aún está en proceso.
+
 ## Descripción
 
 *Textifying Speaking* es una aplicación web que automatiza la transcripción de archivos de audio y video, y ofrece la opción de generar resúmenes de las transcripciones obtenidas. Esta herramienta es ideal para estudiantes, profesionales y cualquier persona que necesite convertir contenido multimedia en texto y obtener resúmenes de estos.
