@@ -23,18 +23,9 @@ services:
     networks:
       - textifying-speaking-network
 
-  backend:
-    image: docker.io/eddindocker/textifying-speaking-nest-backend
-    container_name: textifying-speaking-nest-backend
-    ports:
-      - "3001:3001"
-    networks:
-      - textifying-speaking-network
-    depends_on:
-      - mongo
-
   frontend:
-    image: docker.io/eddindocker/textifying-speaking-react-frontend
+    build: 
+      context: ./react-frontend
     container_name: textifying-speaking-react-frontend
     ports:
       - "5173:5173"
@@ -44,8 +35,20 @@ services:
       - backend
       - mongo
 
+  backend:
+    build: 
+      context: ./nest-backend
+    container_name: textifying-speaking-nest-backend
+    ports:
+      - "3001:3001"
+    networks:
+      - textifying-speaking-network
+    depends_on:
+      - mongo
+
   whisper:
-    image: docker.io/eddindocker/textifying-speaking-django-whisper
+    build: 
+      context: ./django-whisper
     container_name: textifying-speaking-django-whisper
     ports:
       - "8001:8001"
@@ -58,9 +61,10 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [ gpu ]
-
+              
   summarizer:
-    image: docker.io/eddindocker/textifying-speaking-django-summarizer
+    build: 
+      context: ./django-summarizer
     container_name: textifying-speaking-django-summarizer
     ports:
       - "8002:8002"

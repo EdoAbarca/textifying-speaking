@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Toastify from "toastify-js";
 import "toastify-js/src/toastify.css";
-import axios from 'axios';
+//import axios from 'axios';
 
 function AddKey() {
 
@@ -24,20 +24,6 @@ function AddKey() {
         }
       }
       fetchOptions();
-    }, [])
-  
-    useEffect(() => {
-      async function fetchUserKeys() {
-        try {
-          let response = await fetch(`http://localhost:3001/api/final/key/user/${user.idUser}`);
-          const data = await response.json();
-          console.log(data);
-          setUserKeys(data);
-        } catch (error) {
-          console.log(error);
-        }
-      }
-      fetchUserKeys();
     }, [])
   
     function goBack() {

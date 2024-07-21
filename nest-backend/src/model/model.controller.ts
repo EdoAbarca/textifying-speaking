@@ -2,7 +2,7 @@ import { Controller, Get, Post, Body, Put, Param, Delete } from '@nestjs/common'
 import { ModelService } from './model.service';
 import { Model as ModelDocument } from './entities/model.schema';
 
-@Controller('models')
+@Controller('model')
 export class ModelController {
   constructor(private readonly modelService: ModelService) {}
 
