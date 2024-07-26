@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-import { MethodsModule } from './methods/methods.module';
+import { ApiModule } from './api/api.module';
 import { UserModule } from './user/user.module';
 import { ModelModule } from './model/model.module';
 import { KeyModule } from './key/key.module';
@@ -13,7 +13,7 @@ import { TranscriptionModule } from './transcription/transcription.module';
       isGlobal: true,
     }),
     MongooseModule.forRoot(process.env.MONGODB_URI),
-    MethodsModule,
+    ApiModule,
     UserModule,
     ModelModule,
     KeyModule,

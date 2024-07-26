@@ -3,7 +3,7 @@ import { Model, ModelSchema } from '../../model/entities/model.schema';
 
 export type KeyDocument = Key & Document;
 
-@Schema()
+@Schema({ timestamps: true })
 export class Key {
   @Prop({ required: true })
   api_key: string;

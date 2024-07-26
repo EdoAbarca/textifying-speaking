@@ -7,7 +7,10 @@ class ModelDto {
 	name: string;
 
 	@IsString()
-	goal: string;
+	purpose: string;
+
+	@IsString()
+	service: string;
 }
 
 export class CreateTranscriptionDto {

@@ -8,6 +8,22 @@ const Dashboard = () => {
 	const [selectedView, setSelectedView] = useState('Transcripts');
 	const views = ['Transcripts', 'API keys', 'Analytics', 'Upload'];
 	const navigate = useNavigate();
+	const [transcripts, setTranscripts] = useState([]);
+	const [transcriptorKeys, setTranscriptorKeys] = useState([]);
+  const [summarizerKeys, setSummarizerKeys] = useState([]);
+
+	useEffect(() => {
+		axios.get('http://localhost:3001/api/transcription').then((response) => {
+			console.log(response.data);
+			setTranscripts(response.data);
+		});
+		axios.get('http://localhost:3001/api/key/transcriptors').then((response) => {
+			setTranscriptorKeys(response.data);
+		});
+    axios.get('http://localhost:3001/api/key/summarizers').then((response) => {
+			setSummarizerKeys(response.data);
+		});
+	}, []);
 
 	return (
 		<div className="p-6">
@@ -16,28 +32,28 @@ const Dashboard = () => {
 					<button
 						key={view}
 						onClick={() => setSelectedView(view)}
-						className={`px-4 rounded-xl transition duration-500 ease-in-out ${selectedView === view ? 'bg-white' : 'bg-gray-200 text-gray-700'}`}
-					>
+						className={`px-4 rounded-xl transition duration-500 ease-in-out ${selectedView === view ? 'bg-white' : 'bg-gray-200 text-gray-700'}`}>
 						{view}
 					</button>
 				))}
 			</div>
 			<div className="mt-4">
-				{selectedView === 'Transcripts' && <Transcripts />}
+				{selectedView === 'Transcripts' && <Transcripts transcripts={transcripts}/>}
 				{selectedView === 'Analytics' && <Analytics />}
-				{selectedView === 'API keys' && <APIs />}
+				{selectedView === 'API keys' && <APIs transcriptors={transcriptorKeys} summarizers={summarizerKeys} />}
 				{selectedView === 'Upload' && navigate("/upload")}
 			</div>
 		</div>
 	);
 };
 
-const Transcripts = () => {
+const Transcripts = ({transcripts}) => {
+  /* 
 	const transcripts = [
 		{ file: 'Meeting Recap.mp3', duration: '12:34', wordCount: '2,345', date: '13-07-2024', transcription: 'Meeting recap transcription text...', summary: 'Meeting recap summary text...' },
 		{ file: 'Interview Highlights.mp3', duration: '8:56', wordCount: '1,789', date: '13-07-2024', transcription: 'Interview highlights transcription text...', summary: 'Interview highlights summary text...' },
 		{ file: 'Team Brainstorm.mp3', duration: '15:22', wordCount: '3,456', date: '13-07-2024', transcription: 'Team brainstorm transcription text...', summary: 'Team brainstorm summary text...' },
-	];
+	];*/
 
 	const [openRowIndex, setOpenRowIndex] = useState(null);
 	const [expandedTranscript, setExpandedTranscript] = useState(null);
@@ -69,40 +85,44 @@ const Transcripts = () => {
 		};
 	}, []);
 
-	return (
-		<div>
-			<h1 className="text-2xl font-semibold">Transcripts</h1>
-			<p className="text-center text-gray-500">View and manage all your transcribed files.</p>
-			<div className="mt-4">
-				<table className="min-w-full bg-white border border-gray-200">
-					<thead>
-						<tr>
-							<th className="py-2 px-4 border-b">File</th>
-							<th className="py-2 px-4 border-b">Duration</th>
-							<th className="py-2 px-4 border-b">Word Count</th>
-							<th className="py-2 px-4 border-b">Date</th>
-							<th className="py-2 px-4 border-b">Actions</th>
-						</tr>
-					</thead>
-					<tbody>
-						{transcripts.map((transcript, index) => (
-							<TranscriptRow
-								key={index}
-								transcript={transcript}
-								isOpen={openRowIndex === index}
-								onToggle={() => handleToggle(index)}
-								onExpand={() => handleExpand(transcript)}
-								ref={(el) => (dropdownRefs.current[index] = el)}
-							/>
-						))}
-					</tbody>
-				</table>
-			</div>
-			{expandedTranscript && (
-				<Modal onClose={handleCloseExpand} transcript={expandedTranscript} />
-			)}
-		</div>
-	);
+  return (
+    <div>
+      <h1 className="text-2xl font-semibold">Transcripts</h1>
+      <p className="text-center text-gray-500">View and manage all your transcribed files.</p>
+      {transcripts.length === 0 ? (
+        <p className="text-center mt-4">No transcriptions detected. To create a transcription, click 'Upload'.</p>
+      ) : (
+        <div className="mt-4">
+          <table className="min-w-full bg-white border border-gray-200">
+            <thead>
+              <tr>
+                <th className="py-2 px-4 border-b">File</th>
+                <th className="py-2 px-4 border-b">Duration</th>
+                <th className="py-2 px-4 border-b">Word Count</th>
+                <th className="py-2 px-4 border-b">Date</th>
+                <th className="py-2 px-4 border-b">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {transcripts.map((transcript, index) => (
+                <TranscriptRow
+                  key={index}
+                  transcript={transcript}
+                  isOpen={openRowIndex === index}
+                  onToggle={() => handleToggle(index)}
+                  onExpand={() => handleExpand(transcript)}
+                  ref={(el) => (dropdownRefs.current[index] = el)}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {expandedTranscript && (
+        <Modal onClose={handleCloseExpand} transcript={expandedTranscript} />
+      )}
+    </div>
+  );
 };
 
 const TranscriptRow = React.forwardRef(({ transcript, isOpen, onToggle, onExpand }, ref) => {
@@ -168,68 +188,95 @@ const Analytics = () => {
 	);
 };
 
-const APIs = () => {
-	const [apiKeys, setApiKeys] = useState([
-		{ key: 'api-key-t', service: 'Transcriptors' },
-		{ key: 'api-key-s', service: 'Summarizers' },
-	]);
-	const [showKey, setShowKey] = useState(Array(apiKeys.length).fill(false));
+const APIs = ({ transcriptors, summarizers }) => {
+  const [showKey, setShowKey] = useState({
+    transcriptors: Array(transcriptors.length).fill(false),
+    summarizers: Array(summarizers.length).fill(false),
+  });
 
-	const handleToggleShowKey = (index) => {
-		const newShowKey = [...showKey];
-		newShowKey[index] = !newShowKey[index];
-		setShowKey(newShowKey);
-	};
+  const handleToggleShowKey = (service, index) => {
+    const newShowKey = { ...showKey };
+    newShowKey[service][index] = !newShowKey[service][index];
+    setShowKey(newShowKey);
+  };
 
-	const handleDeleteKey = (index) => {
-		const confirmDelete = window.confirm('Are you sure you want to delete this API key?');
-		if (confirmDelete) {
-			const newApiKeys = [...apiKeys];
-			newApiKeys.splice(index, 1);
-			setApiKeys(newApiKeys);
-		}
-	};
+  const handleDeleteKey = (service, index) => {
+    const confirmDelete = window.confirm('Are you sure you want to delete this API key?');
+    if (confirmDelete) {
+      axios.delete(`http://localhost:3001/api/key/${service._id}`);
+      const newApiKeys = { ...showKey };
+      newApiKeys[service].splice(index, 1);
+      setShowKey(newApiKeys);
+    }
+  };
 
-	return (
-		<div>
-			<h1 className="text-2xl font-semibold">API keys</h1>
-			<p className="text-center text-gray-500">Manage your API keys here.</p>
-			<div className="flex justify-between items-center my-4">
-				<button className="px-4 py-2 bg-blue-500 text-white rounded">Add API Key</button>
-				<select className="px-4 py-2 border rounded">
-					<option value="Transcriptors">Transcriptors</option>
-					<option value="Summarizers">Summarizers</option>
-				</select>
-			</div>
-			<table className="min-w-full bg-white">
-				<thead>
-					<tr>
-						<th className="py-2 px-4 border-b">Key</th>
-						<th className="py-2 px-4 border-b">Service</th>
-						<th className="py-2 px-4 border-b">Options</th>
-					</tr>
-				</thead>
-				<tbody>
-					{apiKeys.map((apiKey, index) => (
-						<tr key={index}>
-							<td className="py-2 px-4 border-b">
-								{showKey[index] ? apiKey.key : '**********'}
-							</td>
-							<td className="py-2 px-4 border-b">{apiKey.service}</td>
-							<td className="py-2 px-4 border-b">
-								<button onClick={() => handleToggleShowKey(index)} className="mr-2">
-									<FontAwesomeIcon icon={showKey[index] ? faEyeSlash : faEye} />
-								</button>
-								<button onClick={() => handleDeleteKey(index)}>
-									<FontAwesomeIcon icon={faTrash} />
-								</button>
-							</td>
-						</tr>
-					))}
-				</tbody>
-			</table>
-		</div>
-	);
+  return (
+    <div>
+      <h1 className="text-2xl font-semibold">API keys</h1>
+      <p className="text-center text-gray-500">Manage your API keys here.</p>
+      <div className="flex justify-between items-center my-4">
+        <button className="px-4 py-2 bg-blue-500 text-white rounded">Add API Key</button>
+        <select className="px-4 py-2 border rounded">
+          <option value="transcriptors">Transcriptors</option>
+          <option value="summarizers">Summarizers</option>
+        </select>
+      </div>
+      <table className="min-w-full bg-white">
+        <thead>
+          <tr>
+            <th className="py-2 px-4 border-b">Key</th>
+            <th className="py-2 px-4 border-b">Service</th>
+            <th className="py-2 px-4 border-b">Options</th>
+          </tr>
+        </thead>
+        <tbody>
+          {transcriptors.map((apiKey, index) => (
+            <tr key={index}>
+              <td className="py-2 px-4 border-b">
+                {showKey.transcriptors[index] ? apiKey.key : '**********'}
+              </td>
+              <td className="py-2 px-4 border-b">Transcriptors</td>
+              <td className="py-2 px-4 border-b">
+                <button onClick={() => handleToggleShowKey('transcriptors', index)} className="mr-2">
+                  <FontAwesomeIcon icon={showKey.transcriptors[index] ? faEyeSlash : faEye} />
+                </button>
+                <button onClick={() => handleDeleteKey('transcriptors', index)}>
+                  <FontAwesomeIcon icon={faTrash} />
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <table className="min-w-full bg-white">
+        <thead>
+          <tr>
+            <th className="py-2 px-4 border-b">Key</th>
+            <th className="py-2 px-4 border-b">Service</th>
+            <th className="py-2 px-4 border-b">Options</th>
+          </tr>
+        </thead>
+        <tbody>
+          {summarizers.map((apiKey, index) => (
+            <tr key={index}>
+              <td className="py-2 px-4 border-b">
+                {showKey.summarizers[index] ? apiKey.key : '**********'}
+              </td>
+              <td className="py-2 px-4 border-b">Summarizers</td>
+              <td className="py-2 px-4 border-b">
+                <button onClick={() => handleToggleShowKey('summarizers', index)} className="mr-2">
+                  <FontAwesomeIcon icon={showKey.summarizers[index] ? faEyeSlash : faEye} />
+                </button>
+                <button onClick={() => handleDeleteKey('summarizers', index)}>
+                  <FontAwesomeIcon icon={faTrash} />
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 };
 
 export default Dashboard;

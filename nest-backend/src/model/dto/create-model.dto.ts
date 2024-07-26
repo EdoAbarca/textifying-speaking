@@ -5,5 +5,8 @@ export class CreateModelDto {
     name: string;
     
     @IsString()
-    goal: string;
+    purpose: string;
+
+    @IsString()
+    service: string;
 }

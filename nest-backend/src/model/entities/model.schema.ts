@@ -9,7 +9,10 @@ export class Model {
   name: string;
 
   @Prop({ required: true })
-  goal: string;
+  purpose: string;
+
+  @Prop({ required: true })
+  service: string;
 }
 
 export const ModelSchema = SchemaFactory.createForClass(Model);

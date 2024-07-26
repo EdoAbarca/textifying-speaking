@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faFileVideo, faFileAudio } from "@fortawesome/free-solid-svg-icons";
 import Toastify from "toastify-js";
@@ -8,30 +8,42 @@ import "toastify-js/src/toastify.css";
 import { Temporal } from "@js-temporal/polyfill";
 
 function Upload() {
-  const navigate = useNavigate();
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [files, setFiles] = useState([]);
   const [transcriptors, setTranscriptors] = useState([]);
-  const [selectedTranscriptor, setSelectedTranscriptor] = useState("");
-  const [selectedSummarizer, setSelectedSummarizer] = useState("");
   const [summarizers, setSummarizers] = useState([]);
-  //const [keys, setKeys] = useState([]);
+  const [selectedTranscriptor, setSelectedTranscriptor] = useState({});
+  const [selectedSummarizer, setSelectedSummarizer] = useState({});
   const [processStarted, setProcessStarted] = useState(false);
   const [processFinished, setProcessFinished] = useState(false);
   const [transcriptionProgress, setTranscriptionProgress] = useState(0);
   const [summarizationProgress, setSummarizationProgress] = useState(0);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    axios.get("http://localhost:3001/model/transcript")
-      .then((response) => setTranscriptors(response.data))
-      .catch((error) => console.log(error));
-  }, []);
+    async function fetchData() {
+      try {
+        const keys = await axios.get("http://localhost:8001/api/key");
+        const transcriptors = keys.data.filter((key) => key.model.purpose === "transcript");
+        setTranscriptors(transcriptors);
+        const summarizers = keys.data.filter((key) => key.model.purpose === "summarize");
+        setSummarizers(summarizers);
+      } catch (error) {
+        console.error(error);
+        Toastify({
+          text: "Error al cargar los datos: " + error.message,
+          duration: 3000,
+          close: true,
+          style: {
+            background: "red",
+            color: "white"
+          }
+        }).showToast();
+      }
+    }
 
-  useEffect(() => {
-    axios.get("http://localhost:3001/model/summary")
-      .then((response) => setSummarizers(response.data))
-      .catch((error) => console.log(error));
+    fetchData();
   }, []);
 
   const handleFileInputChange = (event) => {
@@ -47,44 +59,74 @@ function Upload() {
   };
 
   async function handleSubmit(event) {
-    //Inicio función, toma del tiempo
-    const process_started = performance.now();
+    // Start function, measure time
+    const processStartedTime = performance.now();
     
-    //Valores por defecto
+    // Default values
     event.preventDefault();
     setProcessStarted(true);
-
-    //Tiempo
-    const nowDate = Temporal.Now.plainDateISO();
-    const nowTime = Temporal.Now.plainTimeISO();
-    const nowTimeWithoutMiliseconds = nowTime.toString().split(".")[0];
-    setDate(nowDate.toString());
-    setTime(nowTimeWithoutMiliseconds);
-
-    //FormData
-    const formData = new FormData();
-    files.forEach(file => formData.append('files', file));
-
-    // Inicio transcripciones
+  
+    // Get current date and time
+    const nowDate = Temporal.Now.plainDateISO().toString();
+    const nowTime = Temporal.Now.plainTimeISO().toString().split(".")[0];
+    setDate(nowDate);
+    setTime(nowTime);
+  
+    // Initialize progress
+    setTranscriptionProgress(0);
+    setSummarizationProgress(0);
+  
     try {
-      // Simulación de llamadas a APIs para transcripción y resumen
       for (let i = 0; i < files.length; i++) {
-        // Si el archivo actual es un video, se convierte a audio
-
-
-        // Se transcribe el audio
-
-        // Actualización de progreso de transcripciones
+        let formData = new FormData();
+        const file = files[i];
+  
+        // If the current file is a video, convert it to audio
+        if (file.type.startsWith('video/')) {
+          formData.append('files', file);
+          const convertResponse = await axios.post("http://localhost:3001/convert-files", formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            onUploadProgress: (progressEvent) => {
+              const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+              setTranscriptionProgress(progress);
+            }
+          });
+  
+          const audioFilePath = convertResponse.data.audioFilePath;
+          formData = new FormData();
+          formData.append('audioFilePath', audioFilePath);
+        } else {
+          formData.append('files', file);
+        }
+  
+        // Transcribe the audio
+        const transcriptionResponse = await axios.post("http://localhost:8001/api/transcript", formData);
+  
+        // Update transcription progress
         setTranscriptionProgress(((i + 1) / files.length) * 100);
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Simulación de espera
-
-        // Si se seleccionó un resumidor, se resume el texto transcribido
-
-        // Actualización de progreso de resúmenes
+  
+        // Summarize the transcription if selected
+        const summarizationResponse = await axios.post("http://localhost:8002/api/summarize", {
+          text: transcriptionResponse.data.transcription
+        });
+  
+        // Update summarization progress
         setSummarizationProgress(((i + 1) / files.length) * 100);
+  
+        // Create document with transcription and summary
+        const transcription = {
+          file: files[i].name,
+          date: nowDate,
+          time: nowTime,
+          transcription: transcriptionResponse.data.transcription,
+          summary: summarizationResponse.data.summary,
+        };
+        
+        // Save to database
+        await axios.post("http://localhost:3001/methods/create-transcription", transcription);
       }
       
-      // Simulación de éxito
+      // Success notification
       Toastify({
         text: "Transcripción y resumen completados con éxito",
         duration: 3000,
@@ -105,10 +147,11 @@ function Upload() {
       }).showToast();
       setProcessFinished(true);
     }
-    //Fin función, toma del tiempo
-    const process_finished = performance.now();
-    console.log("Tiempo de ejecución: " + (process_finished - process_started) + " ms");
+    // End function, measure time
+    const processFinishedTime = performance.now();
+    console.log("Tiempo de ejecución: " + (processFinishedTime - processStartedTime) + " ms");
   }
+  
 
   return (
     <div className="flex justify-center items-center h-screen">
