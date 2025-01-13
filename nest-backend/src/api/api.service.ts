@@ -70,7 +70,7 @@ export class ApiService {
 
 	private async convertToAudio(videoFile: Express.Multer.File): Promise<string> {
 		return new Promise((resolve, reject) => {
-			const audioFilePath = `path/to/audio/${videoFile.filename}.mp3`; // Define your audio file path
+			const audioFilePath = `${videoFile.filename}.mp3`; // Define your audio file path
 			ffmpeg(videoFile.path)
 				.output(audioFilePath)
 				.on('end', () => resolve(audioFilePath))

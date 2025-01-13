@@ -6,12 +6,14 @@ import FAQ from './views/FAQ';
 import Upload from './views/Upload';
 import NotFound from './views/NotFound';
 import AddKey from './views/AddKey';
+import TestData from './views/TestData';
 
 function App() {
   return (
     <Router>
       <Routes>
         <Route exact path="/" element={<Home />} />
+        <Route path="/data" element={<TestData />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/faq" element={<FAQ />} />
         <Route path="/upload" element={<Upload />} />

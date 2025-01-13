@@ -1,5 +1,4 @@
-#!/bin/bash
-
+# Script to load images to docker and start the services
 # Define the list of service and folder name pairs
 declare -A services
 services=(

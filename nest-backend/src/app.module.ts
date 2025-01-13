@@ -6,6 +6,9 @@ import { UserModule } from './user/user.module';
 import { ModelModule } from './model/model.module';
 import { KeyModule } from './key/key.module';
 import { TranscriptionModule } from './transcription/transcription.module';
+import { RoleModule } from './role/role.module';
+import { SummaryModule } from './summary/summary.module';
+import { FileModule } from './file/file.module';
 
 @Module({
   imports: [
@@ -18,6 +21,9 @@ import { TranscriptionModule } from './transcription/transcription.module';
     ModelModule,
     KeyModule,
     TranscriptionModule,
+    RoleModule,
+    SummaryModule,
+    FileModule,
   ],
 })
 export class AppModule {}

@@ -9,8 +9,8 @@ import {
 @Injectable()
 export class ModelService implements OnModuleInit {
   private readonly defaultModels = [
-    { name: 'openai/whisper-large-v3', goal: 'Transcript' },
-    { name: 'csebuetnlp/mT5_multilingual_XLSum', goal: 'Summarize' },
+    { name: 'openai/whisper-large-v3', purpose: 'Transcript' },
+    { name: 'csebuetnlp/mT5_multilingual_XLSum', purpose: 'Summarize' },
   ];
 
   constructor(@InjectModel(ModelDocument.name) private readonly modelModel: Model<ModelDocumentType>) {}

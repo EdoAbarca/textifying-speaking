@@ -34,7 +34,7 @@ export class ApiController {
     return this.apiService.createKey(createKeyDto);
   }
 
-  @Post('file')
+  @Post('convert-files')
   @UseInterceptors(FileFieldsInterceptor([{ name: 'files' }]))
   async convertVideoToAudio(@UploadedFiles() files: any) {
     return this.apiService.convertVideoToAudio(files);
