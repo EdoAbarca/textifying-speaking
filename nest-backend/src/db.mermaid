@@ -1,0 +1,39 @@
+erDiagram
+    User {
+        string _id
+        string email
+        string authProvider
+        string authProviderId "e.g., Google/Firebase UID"
+        datetime createdAt
+    }
+
+    File {
+        string _id
+        string userId "References User"
+        string filename
+        string status "uploaded/processing/processed/failed"
+        string storageUrl "Link to S3/Cloud Storage"
+        datetime uploadedAt
+        string originalFormat
+    }
+
+    Transcription {
+        string _id
+        string fileId "References File"
+        string userId "References User"
+        string content
+        string language
+        string status
+        datetime createdAt
+    }
+
+    Summary {
+        string _id
+        string transcriptionId "References Transcription"
+        string content
+        datetime createdAt
+    }
+
+    User ||--o{ File : uploads
+    File ||--|| Transcription : generates
+    Transcription ||--|o Summary : produces
