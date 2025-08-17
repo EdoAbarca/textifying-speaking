@@ -4,17 +4,17 @@ declare -A services
 services=(
     ["frontend"]="react-frontend"
     ["backend"]="nest-backend"
-    ["whisper"]="django-whisper"
-    ["summarizer"]="django-summarizer"
+    #["whisper"]="django-whisper"
+    #["summarizer"]="django-summarizer"
 )
 
 # Define the database services to exclude from stopping
-db_services=("mongo" "mongo-express")
+#db_services=("mongo" "mongo-express")
 
 # Stop and remove non-database containers
 echo "Stopping and removing non-database containers..."
 for service in "${!services[@]}"; do
-    if [[ ! " ${db_services[@]} " =~ " ${service} " ]]; then
+#    if [[ ! " ${db_services[@]} " =~ " ${service} " ]]; then
         echo "Stopping and removing $service..."
         docker-compose rm -s -f $service
     fi

@@ -2,20 +2,20 @@
 $services = @{
     "frontend" = "react-frontend"
     "backend" = "nest-backend"
-    "whisper" = "django-whisper"
-    "summarizer" = "django-summarizer"
+    #"whisper" = "django-whisper"
+    #"summarizer" = "django-summarizer"
 }
 
 # Define the database services to exclude from stopping
-$db_services = @("mongo", "mongo-express")
+#$db_services = @("mongo", "mongo-express")
 
 # Stop and remove non-database containers
 Write-Host "Stopping and removing non-database containers..."
 foreach ($service in $services.Keys) {
-    if ($db_services -notcontains $service) {
+#    if ($db_services -notcontains $service) {
         Write-Host "Stopping and removing $service..."
         docker-compose rm -s -f $service
-    }
+#    }
 }
 
 # Loop through each service and folder pair

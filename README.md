@@ -2,19 +2,16 @@
 
 ## Advertencia
 
-Esta aplicación aún está en proceso.
+Esta aplicación está pasando por un *reboot*. Actualmente proceso de re-diseño, para su posterior implementación.
 
 ## Descripción
 
-*Textifying Speaking* es una aplicación web que automatiza la transcripción de archivos de audio y video, y ofrece la opción de generar resúmenes de las transcripciones obtenidas. Esta herramienta es ideal para estudiantes, profesionales y cualquier persona que necesite convertir contenido multimedia en texto y obtener resúmenes de estos.
+*Textifying Speaking* originalmente se pensó como una aplicación web que automatiza la transcripción de archivos de audio y video, ofreciendo la opción de generar resúmenes de las transcripciones obtenidas. Esta herramienta es ideal para estudiantes, profesionales y cualquier persona que necesite convertir contenido multimedia en texto y obtener resúmenes de estos.
 
 ## Características distintivas
 
-- **Soporte multilingüe:** Si bien la aplicación está diseñada para manejar archivos en español e inglés, es capaz de soportar sobre 40 idiomas, ofreciendo una amplia cobertura para usuarios globales.
-- **Transcripción:** Utiliza el modelo `whisper-v3-large` para ofrecer transcripciones precisas y rápidas.
-- **Resúmenes:** Utiliza el modelo `mT5_multilingual_XLSum` para generar resúmenes concisos.
-- **Confidencialidad de la información:** Los modelos mencionados son llamados desde *Hugging Face* mediante *Inference API*, por lo que no se auto-entrenan con la información que procesan.
-- **Información adicional que, de corresponder, será presentada**
+T.B.A.
+
 
 ## Tecnologías utilizadas
 
@@ -27,7 +24,7 @@ Esta aplicación aún está en proceso.
   - MongoDB
   - Django
 
-## Instalación y configuración (Generado con IA, próximamente será actualizado)
+## Instalación y configuración 
 
 ### Prerrequisitos
 
@@ -37,48 +34,23 @@ Esta aplicación aún está en proceso.
 
 ### Instrucciones de instalación
 
-1. Clonar el repositorio:
-    ```bash
-    git clone https://github.com/tu-usuario/textifying-speaking.git
-    cd textifying-speaking
-    ```
-
-2. Instalar las dependencias del frontend:
-    ```bash
-    cd frontend
-    npm install
-    ```
-
-3. Instalar las dependencias del backend:
-    ```bash
-    cd backend
-    npm install
-    ```
-
-4. Configurar las variables de entorno:
-    - Crear un archivo `.env` en la raíz del proyecto y añadir las variables necesarias para MongoDB, Nest.js, y Django.
-
-5. Iniciar la aplicación:
-    ```bash
-    # Iniciar frontend
-    cd frontend
-    npm run dev
-
-    # Iniciar backend
-    cd backend
-    npm run start:dev
-    ```
-
-6. (Opcional) Usar Docker para entorno de desarrollo:
-    ```bash
-    docker-compose up --build
-    ```
-
+T.B.A.
 
 ## Contribuciones
 
-Las contribuciones son bienvenidas. Por favor, abre un issue o un pull request para discutir cualquier cambio que sea necesario realizar.
+Las contribuciones son bienvenidas. Por favor, abre un *issue* o un *pull request* para discutir cualquier cambio que sea necesario realizar.
 
 ## Licencia
 
 Este proyecto está licenciado bajo la Licencia MIT. Para más detalles, consulta el archivo [LICENSE](./LICENSE).
+
+# CheckList
+
+## Mínimo
+- [] Microservicio básico de transcripción (Hugging Face + Whisper + Django)
+- [] Backend básico con WebSockets para información en tiempo real (NestJS)
+- [] Frontend básico (React + Tailwind, UI con formulario para subir archivo, WebSocket si aplica y retorno de archivo .txt con resultados)
+
+## En evaluación
+- [] Base de datos
+- [] Integr
