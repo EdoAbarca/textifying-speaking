@@ -47,10 +47,11 @@ Este proyecto está licenciado bajo la Licencia MIT. Para más detalles, consult
 # CheckList
 
 ## Mínimo
-- [] Microservicio básico de transcripción (Hugging Face + Whisper + Django)
+- [] Microservicio básico de transcripción (Hugging Face + Whisper (Small) + Django)
 - [] Backend básico con WebSockets para información en tiempo real (NestJS)
 - [] Frontend básico (React + Tailwind, UI con formulario para subir archivo, WebSocket si aplica y retorno de archivo .txt con resultados)
 
 ## En evaluación
 - [] Base de datos
-- [] Integr
+- [] Integración de APIs IAs transcriptoras
+- [] Integración de microservicios que disponibilicen IAs transcriptoras localmente (o remotamente si Hugging Face lo permite)
