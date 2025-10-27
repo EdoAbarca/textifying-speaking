@@ -1,31 +1,7 @@
 services:
-#  mongo:
-#    image: mongo:latest
-#    container_name: mongo
-#    ports:
-#      - "27017:27017"
-#    volumes:
-#      - ./data:/data/db
-#    networks:
-#      - textifying-speaking-network
-#    restart: always
-
-#  mongo-express:
-#    image: mongo-express
-#    container_name: mongo-express
-#    restart: always
-#    ports:
-#      - 8081:8081
-#    environment: # A guardar en un archivo .env
-#      ME_CONFIG_MONGODB_ADMINUSERNAME: root
-#      ME_CONFIG_MONGODB_ADMINPASSWORD: example
-#      ME_CONFIG_MONGODB_URL: mongodb://root:example@mongo:27017/
-#    networks:
-#      - textifying-speaking-network
-
   frontend:
     build: 
-      context: ./react-frontend
+      context: ./ts-front
     container_name: ts-frontend
     ports:
       - "5173:5173"
@@ -33,38 +9,15 @@ services:
       - textifying-speaking-network
     depends_on:
       - backend
-#      - mongo
 
   backend:
     build: 
-      context: ./nest-backend
-    container_name: ts-nest-backend
+      context: ./ts-back
+    container_name: ts-backend
     ports:
       - "3001:3001"
     networks:
       - textifying-speaking-network
-#    depends_on:
-#      - mongo
-
-#  whisper:
-#    build: 
-#      context: ./django-whisper
-#    container_name: textifying-speaking-django-whisper
-#    ports:
-#      - "8001:8001"
-#    networks:
-#      - textifying-speaking-network
-#    deploy: # Hardware disponible
-#      resources:
-#        reservations:
-#          devices:
-#            - driver: nvidia
-#              count: 1
-#              capabilities: [ gpu ]
-              
-
 
 networks:
   textifying-speaking-network:
-volumes:
-  data:
