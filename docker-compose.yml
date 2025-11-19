@@ -16,8 +16,28 @@ services:
     container_name: ts-backend
     ports:
       - "3001:3001"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/textifying-speaking
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+    networks:
+      - textifying-speaking-network
+    depends_on:
+      - mongodb
+
+  mongodb:
+    image: mongo:7.0
+    container_name: ts-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=textifying-speaking
+    volumes:
+      - mongodb_data:/data/db
     networks:
       - textifying-speaking-network
 
 networks:
   textifying-speaking-network:
+
+volumes:
+  mongodb_data:
