@@ -5,6 +5,7 @@ import Navbar from './components/Navbar'
 import HealthCheck from './pages/HealthCheck'
 import Register from './pages/Register'
 import Login from './pages/Login'
+import Upload from './pages/Upload'
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
         <Route path="/" element={<HealthCheck />} />
         <Route path="/register" element={<Register />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/upload" element={<Upload />} />
       </Routes>
       <ToastContainer
         position="top-right"
