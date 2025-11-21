@@ -22,7 +22,7 @@
   - Invalid credentials handling
   - Success notification with automatic redirect
 
-### 📁 File Upload
+### 📁 File Management
 - **Media File Upload (US-03)**: Upload audio/video files for transcription
   - Supported formats: MP3, WAV, MP4, M4A
   - Maximum file size: 100MB
@@ -32,6 +32,18 @@
   - Server-side file type and size validation
   - JWT-protected endpoint (authentication required)
   - Multipart form data support with Axios
+
+- **Dashboard & File Management (US-04)**: View and manage uploaded files
+  - List all user's uploaded files in a responsive grid layout
+  - File cards display: filename, type, size, upload date, status
+  - Color-coded status badges (uploaded, processing, completed, failed)
+  - File type icons for audio/video files
+  - View detailed file information in modal
+  - Delete files with confirmation prompt
+  - Ownership validation (users can only delete their own files)
+  - Dynamic UI updates after deletion
+  - Empty state with upload CTA
+  - JWT-protected endpoints (authentication required)
 
 ## Tech Stack
 
@@ -260,6 +272,77 @@ curl -X POST http://localhost:3001/media/upload \
 - Filename format: `file-{timestamp}-{random}.{ext}`
 - Metadata stored in MongoDB
 
+#### GET `/media`
+List all uploaded files for the authenticated user.
+
+**Authentication:** Required (Bearer JWT token)
+
+**Example (curl):**
+```bash
+curl -X GET http://localhost:3001/media \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Success Response (200):**
+```json
+{
+  "files": [
+    {
+      "id": "507f1f77bcf86cd799439011",
+      "filename": "file-1637258400000-123456789.mp3",
+      "originalFilename": "audio.mp3",
+      "mimetype": "audio/mpeg",
+      "size": 2048576,
+      "uploadDate": "2025-11-19T20:00:00.000Z",
+      "status": "uploaded"
+    }
+  ]
+}
+```
+
+**Error Responses:**
+- `401 Unauthorized`: Missing or invalid JWT token
+
+**Response Fields:**
+- `id`: Unique file identifier
+- `filename`: Stored filename on server
+- `originalFilename`: Original filename uploaded by user
+- `mimetype`: File MIME type
+- `size`: File size in bytes
+- `uploadDate`: Upload timestamp (ISO 8601)
+- `status`: Processing status (`uploaded`, `processing`, `completed`, `failed`)
+
+#### DELETE `/media/:id`
+Delete a specific file by ID.
+
+**Authentication:** Required (Bearer JWT token)
+
+**Path Parameters:**
+- `id`: File ID (MongoDB ObjectId)
+
+**Example (curl):**
+```bash
+curl -X DELETE http://localhost:3001/media/507f1f77bcf86cd799439011 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Success Response (200):**
+```json
+{
+  "message": "File deleted successfully"
+}
+```
+
+**Error Responses:**
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: User does not own the file
+- `404 Not Found`: File not found
+
+**Behavior:**
+- Validates file ownership before deletion
+- Deletes both physical file from storage and database record
+- If physical file is missing, continues with database deletion (logs error)
+
 ## Project Structure
 
 ```
@@ -291,11 +374,12 @@ textifying-speaking/
 ├── ts-front/                 # React Frontend
 │   ├── src/
 │   │   ├── components/
-│   │   │   └── Navbar.jsx   # Navigation with auth UI
+│   │   │   └── Navbar.jsx   # Navigation with auth UI & Dashboard link
 │   │   ├── pages/
 │   │   │   ├── Register.jsx # Registration page
 │   │   │   ├── Login.jsx    # Login page
 │   │   │   ├── Upload.jsx   # File upload page
+│   │   │   ├── Dashboard.jsx # File management dashboard
 │   │   │   └── HealthCheck.jsx
 │   │   ├── store/
 │   │   │   └── authStore.js # Zustand auth state
@@ -406,6 +490,46 @@ docker exec ts-backend npm run test:cov
      -F "file=@/path/to/document.pdf"
    ```
 
+#### Dashboard & File Management Tests
+
+1. **List User Files:**
+   ```bash
+   # Get authentication token
+   TOKEN=$(curl -s -X POST http://localhost:3001/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"email":"test@example.com","password":"password123"}' \
+     | jq -r '.accessToken')
+
+   # List all files for authenticated user
+   curl -X GET http://localhost:3001/media \
+     -H "Authorization: Bearer $TOKEN"
+   ```
+
+2. **Delete File:**
+   ```bash
+   # Delete a specific file (use file ID from list response)
+   curl -X DELETE http://localhost:3001/media/507f1f77bcf86cd799439011 \
+     -H "Authorization: Bearer $TOKEN"
+   ```
+
+3. **Delete Another User's File (Should Fail):**
+   ```bash
+   # Attempt to delete a file owned by another user
+   # Should return 403 Forbidden
+   curl -X DELETE http://localhost:3001/media/ANOTHER_USER_FILE_ID \
+     -H "Authorization: Bearer $TOKEN"
+   ```
+
+4. **Frontend Dashboard Access:**
+   - Navigate to http://localhost:5173/dashboard
+   - Login if not authenticated (auto-redirects to /login)
+   - View grid of uploaded files with metadata
+   - Click "Details" button to see full file information in modal
+   - Click "Delete" button to remove a file (shows confirmation modal)
+   - Confirm deletion and verify file list updates automatically
+   - View empty state with "Upload Your First File" button when no files exist
+   - Use "Refresh" button to manually reload file list
+
 ## Environment Variables
 
 ### Backend (`ts-back/.env`)
@@ -426,6 +550,8 @@ Environment variables are configured in `docker-compose.yml` for containerized d
 - ✅ Input validation (client-side and server-side)
 - ✅ Email uniqueness enforcement
 - ✅ Username uniqueness enforcement
+- ✅ File ownership validation (users can only delete their own files)
+- ✅ Protected routes (authentication required for sensitive operations)
 - ✅ CORS enabled for frontend communication
 - ✅ MongoDB connection security
 - ✅ Secure credential verification (constant-time comparison via bcrypt)

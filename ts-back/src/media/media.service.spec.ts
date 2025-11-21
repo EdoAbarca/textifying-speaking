@@ -119,4 +119,58 @@ describe('MediaService', () => {
       expect(mockMediaFileModel.findByIdAndDelete).toHaveBeenCalledWith(fileId);
     });
   });
+
+  describe('deleteFileById', () => {
+    it('should delete both file from storage and database', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+      
+      const fs = require('fs/promises');
+      jest.spyOn(fs, 'unlink').mockResolvedValue(undefined);
+      
+      mockMediaFileModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(mockMediaFile),
+      });
+      
+      mockMediaFileModel.findByIdAndDelete.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(mockMediaFile),
+      });
+
+      await service.deleteFileById(fileId);
+
+      expect(mockMediaFileModel.findById).toHaveBeenCalledWith(fileId);
+      expect(fs.unlink).toHaveBeenCalledWith(mockMediaFile.path);
+      expect(mockMediaFileModel.findByIdAndDelete).toHaveBeenCalledWith(fileId);
+    });
+
+    it('should still delete from database even if physical file deletion fails', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+      
+      const fs = require('fs/promises');
+      jest.spyOn(fs, 'unlink').mockRejectedValue(new Error('File not found'));
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      
+      mockMediaFileModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(mockMediaFile),
+      });
+      
+      mockMediaFileModel.findByIdAndDelete.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(mockMediaFile),
+      });
+
+      await service.deleteFileById(fileId);
+
+      expect(mockMediaFileModel.findByIdAndDelete).toHaveBeenCalledWith(fileId);
+      expect(console.error).toHaveBeenCalled();
+    });
+
+    it('should throw error if file not found in database', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+      
+      mockMediaFileModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(null),
+      });
+
+      await expect(service.deleteFileById(fileId)).rejects.toThrow('File not found in database');
+    });
+  });
 });

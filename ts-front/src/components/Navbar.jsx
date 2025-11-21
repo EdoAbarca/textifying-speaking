@@ -45,6 +45,15 @@ export default function Navbar() {
           <div className="flex items-center gap-4">
             {user ? (
               <>
+                {/* Dashboard button */}
+                <button
+                  onClick={() => navigate('/dashboard')}
+                  className="px-4 py-2 text-indigo-600 hover:text-indigo-700 font-medium transition-colors flex items-center gap-2"
+                >
+                  <Icon icon="mdi:view-dashboard" />
+                  Dashboard
+                </button>
+
                 {/* Upload button */}
                 <button
                   onClick={() => navigate('/upload')}

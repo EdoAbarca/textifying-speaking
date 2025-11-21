@@ -115,7 +115,7 @@ test-backend:
 
 test-backend-e2e:
 	@echo "Running backend E2E tests..."
-	cd ts-back && npm run test:e2e
+	cd ts-back && JWT_SECRET=test-secret-key npm run test:e2e
 
 test-backend-cov:
 	@echo "Running backend tests with coverage..."

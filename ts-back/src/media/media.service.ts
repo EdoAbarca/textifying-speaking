@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { MediaFile, MediaFileDocument } from './schemas/media-file.schema';
+import * as fs from 'fs/promises';
 
 @Injectable()
 export class MediaService {
@@ -38,5 +39,24 @@ export class MediaService {
 
   async deleteById(id: string): Promise<void> {
     await this.mediaFileModel.findByIdAndDelete(id).exec();
+  }
+
+  async deleteFileById(id: string): Promise<void> {
+    const file = await this.findById(id);
+    
+    if (!file) {
+      throw new InternalServerErrorException('File not found in database');
+    }
+
+    // Delete physical file from storage
+    try {
+      await fs.unlink(file.path);
+    } catch (error) {
+      // Log error but continue to delete from database
+      console.error(`Failed to delete physical file: ${file.path}`, error);
+    }
+
+    // Delete from database
+    await this.deleteById(id);
   }
 }
