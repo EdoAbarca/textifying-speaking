@@ -2,6 +2,26 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Icon } from '@iconify/react';
+import * as yup from 'yup';
+
+// Yup validation schema
+const registerSchema = yup.object().shape({
+  username: yup
+    .string()
+    .required('Username is required')
+    .min(3, 'Username must be at least 3 characters long')
+    .max(30, 'Username must not exceed 30 characters')
+    .trim(),
+  email: yup
+    .string()
+    .email('Invalid email format')
+    .required('Email is required')
+    .trim(),
+  password: yup
+    .string()
+    .required('Password is required')
+    .min(8, 'Password must be at least 8 characters long'),
+});
 
 export default function Register() {
   const navigate = useNavigate();
@@ -14,34 +34,19 @@ export default function Register() {
   const [isLoading, setIsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
 
-  const validateForm = () => {
-    const newErrors = {};
-
-    // Username validation
-    if (!formData.username.trim()) {
-      newErrors.username = 'Username is required';
-    } else if (formData.username.length < 3) {
-      newErrors.username = 'Username must be at least 3 characters long';
-    } else if (formData.username.length > 30) {
-      newErrors.username = 'Username must not exceed 30 characters';
+  const validateForm = async () => {
+    try {
+      await registerSchema.validate(formData, { abortEarly: false });
+      setErrors({});
+      return true;
+    } catch (err) {
+      const validationErrors = {};
+      err.inner.forEach((error) => {
+        validationErrors[error.path] = error.message;
+      });
+      setErrors(validationErrors);
+      return false;
     }
-
-    // Email validation
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Invalid email format';
-    }
-
-    // Password validation
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters long';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
   };
 
   const handleChange = (e) => {
@@ -62,7 +67,8 @@ export default function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!validateForm()) {
+    const isValid = await validateForm();
+    if (!isValid) {
       return;
     }
 
@@ -105,8 +111,8 @@ export default function Register() {
   const handleModalClose = (action) => {
     setShowModal(false);
     if (action === 'login') {
-      // Navigate to login page when implemented
-      toast.info('Login functionality will be implemented in US-02');
+      // Navigate to login page
+      navigate('/login');
     } else {
       // Go back to home/previous page
       navigate('/');
@@ -237,7 +243,7 @@ export default function Register() {
           <p className="text-sm text-gray-600">
             Already have an account?{' '}
             <button
-              onClick={() => toast.info('Login functionality will be implemented in US-02')}
+              onClick={() => navigate('/login')}
               className="text-indigo-600 hover:text-indigo-500 font-medium"
             >
               Log in
