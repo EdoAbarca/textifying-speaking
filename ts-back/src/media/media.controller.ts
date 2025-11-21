@@ -1,6 +1,9 @@
 import {
   Controller,
   Post,
+  Get,
+  Delete,
+  Param,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -8,6 +11,8 @@ import {
   HttpStatus,
   HttpCode,
   BadRequestException,
+  NotFoundException,
+  ForbiddenException,
   UseFilters,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -48,6 +53,47 @@ export class MediaController {
         uploadDate: mediaFile.uploadDate,
         status: mediaFile.status,
       },
+    };
+  }
+
+  @Get()
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  async getFiles(@Request() req) {
+    const files = await this.mediaService.findAllByUserId(req.user.sub);
+
+    return {
+      files: files.map((file) => ({
+        id: file._id,
+        filename: file.filename,
+        originalFilename: file.originalFilename,
+        mimetype: file.mimetype,
+        size: file.size,
+        uploadDate: file.uploadDate,
+        status: file.status,
+      })),
+    };
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  async deleteFile(@Param('id') id: string, @Request() req) {
+    const file = await this.mediaService.findById(id);
+
+    if (!file) {
+      throw new NotFoundException('File not found');
+    }
+
+    // Verify file ownership
+    if (file.userId.toString() !== req.user.sub) {
+      throw new ForbiddenException('You do not have permission to delete this file');
+    }
+
+    await this.mediaService.deleteFileById(id);
+
+    return {
+      message: 'File deleted successfully',
     };
   }
 }
