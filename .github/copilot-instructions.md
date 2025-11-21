@@ -287,3 +287,34 @@ curl -X POST http://localhost:3001/media/upload \
   - Protected route (requires authentication)
   - Upload button in Navbar for authenticated users
   - Responsive design with TailwindCSS
+
+### US-04: See Uploaded Files ✅
+- **Backend**:
+  - GET `/media` endpoint with JWT authentication
+  - Returns all files for authenticated user (id, filename, originalFilename, mimetype, size, uploadDate, status)
+  - DELETE `/media/:id` endpoint with JWT authentication
+  - Ownership validation before deletion (403 if user doesn't own file)
+  - Deletes both physical file from storage and database record
+  - Graceful handling if physical file missing (logs error, continues with DB deletion)
+  - Unit tests for media service (deleteFileById, error handling)
+  - E2E tests for both endpoints (auth required, ownership validation, 404/403 errors)
+  - Tests use unique timestamps to avoid user conflicts in parallel test execution
+- **Frontend**:
+  - Dashboard page at `/dashboard` route with grid layout
+  - Card-based file display with file type icons (audio/video)
+  - File metadata: originalFilename, size (formatted), upload date (formatted), status badge, MIME type
+  - Color-coded status badges (green for uploaded, yellow for processing, blue for completed, red for failed)
+  - File type icons using @iconify/react (mdi:music, mdi:video, mdi:file)
+  - "View Details" button opens modal with full file metadata
+  - Details modal shows: file ID, storage filename, size, upload date, status, MIME type
+  - "Delete" button with confirmation modal
+  - Confirmation modal with warning icon and file name
+  - Dynamic UI updates after deletion (fetches updated file list)
+  - Empty state with icon and "Upload Your First File" CTA
+  - Refresh button to manually reload file list
+  - Dashboard link in Navbar for authenticated users
+  - Protected route (redirects to login if not authenticated)
+  - Error handling with toast notifications
+  - Loading states during data fetch and deletion
+  - Responsive grid layout (1 column mobile, 2 tablet, 3 desktop)
+  - Gradient background with TailwindCSS
