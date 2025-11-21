@@ -1,5 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, InternalServerErrorException } from '@nestjs/common';
+import {
+  ConflictException,
+  InternalServerErrorException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import * as bcrypt from 'bcrypt';
@@ -9,6 +14,7 @@ jest.mock('bcrypt');
 describe('AuthService', () => {
   let service: AuthService;
   let usersService: jest.Mocked<UsersService>;
+  let jwtService: jest.Mocked<JwtService>;
 
   const mockUser = {
     _id: 'mockId',
@@ -19,10 +25,17 @@ describe('AuthService', () => {
   };
 
   beforeEach(async () => {
+    // Clear all mock calls before each test
+    jest.clearAllMocks();
+
     const mockUsersService = {
       findByEmail: jest.fn(),
       findByUsername: jest.fn(),
       create: jest.fn(),
+    };
+
+    const mockJwtService = {
+      signAsync: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -32,11 +45,16 @@ describe('AuthService', () => {
           provide: UsersService,
           useValue: mockUsersService,
         },
+        {
+          provide: JwtService,
+          useValue: mockJwtService,
+        },
       ],
     }).compile();
 
     service = module.get<AuthService>(AuthService);
     usersService = module.get(UsersService);
+    jwtService = module.get(JwtService);
   });
 
   it('should be defined', () => {
@@ -107,6 +125,67 @@ describe('AuthService', () => {
       await expect(service.register(registerDto)).rejects.toThrow(
         InternalServerErrorException,
       );
+    });
+  });
+
+  describe('login', () => {
+    const loginDto = {
+      email: 'test@example.com',
+      password: 'password123',
+    };
+
+    it('should successfully login a user with valid credentials', async () => {
+      const mockToken = 'mock.jwt.token';
+      usersService.findByEmail.mockResolvedValue(mockUser as any);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      jwtService.signAsync.mockResolvedValue(mockToken);
+
+      const result = await service.login(loginDto);
+
+      expect(usersService.findByEmail).toHaveBeenCalledWith(loginDto.email);
+      expect(bcrypt.compare).toHaveBeenCalledWith(
+        loginDto.password,
+        mockUser.passwordHash,
+      );
+      expect(jwtService.signAsync).toHaveBeenCalledWith({
+        sub: mockUser._id,
+        email: mockUser.email,
+        username: mockUser.username,
+      });
+      expect(result).toEqual({
+        message: 'Login successful',
+        accessToken: mockToken,
+        user: {
+          id: mockUser._id,
+          username: mockUser.username,
+          email: mockUser.email,
+        },
+      });
+    });
+
+    it('should throw UnauthorizedException if user does not exist', async () => {
+      usersService.findByEmail.mockResolvedValue(null);
+
+      await expect(service.login(loginDto)).rejects.toThrow(
+        new UnauthorizedException('Invalid credentials'),
+      );
+      expect(usersService.findByEmail).toHaveBeenCalledWith(loginDto.email);
+      expect(bcrypt.compare).not.toHaveBeenCalled();
+    });
+
+    it('should throw UnauthorizedException if password is invalid', async () => {
+      usersService.findByEmail.mockResolvedValue(mockUser as any);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+      await expect(service.login(loginDto)).rejects.toThrow(
+        new UnauthorizedException('Invalid credentials'),
+      );
+      expect(usersService.findByEmail).toHaveBeenCalledWith(loginDto.email);
+      expect(bcrypt.compare).toHaveBeenCalledWith(
+        loginDto.password,
+        mockUser.passwordHash,
+      );
+      expect(jwtService.signAsync).not.toHaveBeenCalled();
     });
   });
 });
