@@ -22,12 +22,24 @@
   - Invalid credentials handling
   - Success notification with automatic redirect
 
+### 📁 File Upload
+- **Media File Upload (US-03)**: Upload audio/video files for transcription
+  - Supported formats: MP3, WAV, MP4, M4A
+  - Maximum file size: 100MB
+  - Drag-and-drop interface
+  - Real-time upload progress tracking
+  - Client-side file validation
+  - Server-side file type and size validation
+  - JWT-protected endpoint (authentication required)
+  - Multipart form data support with Axios
+
 ## Tech Stack
 
 ### Backend
 - **Framework**: NestJS 10.x (TypeScript)
 - **Database**: MongoDB with Mongoose ODM
 - **Authentication**: bcrypt for password hashing, JWT for session management
+- **File Upload**: Multer for multipart form data handling
 - **Validation**: class-validator & class-transformer
 - **Configuration**: @nestjs/config for environment variables
 - **Testing**: Jest for unit and E2E tests
@@ -36,6 +48,9 @@
 - **Framework**: React 19 + Vite 7
 - **Routing**: React Router DOM 7
 - **Styling**: TailwindCSS 4
+- **HTTP Client**: Axios for API requests & file uploads
+- **Form Validation**: Yup for schema-based validation
+- **State Management**: Zustand with persist middleware
 - **Notifications**: React Toastify
 - **Icons**: Iconify React
 
@@ -197,6 +212,54 @@ Authenticate a user and receive a JWT token.
 - Payload includes: user ID (`sub`), email, username
 - Store in `localStorage` on client-side for subsequent authenticated requests
 
+### Media Endpoints
+
+#### POST `/media/upload`
+Upload an audio or video file for transcription.
+
+**Authentication:** Required (Bearer JWT token)
+
+**Request:**
+- Content-Type: `multipart/form-data`
+- Body: Form data with file field
+
+**Example (curl):**
+```bash
+curl -X POST http://localhost:3001/media/upload \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -F "file=@/path/to/audio.mp3"
+```
+
+**Success Response (201):**
+```json
+{
+  "message": "File uploaded successfully",
+  "file": {
+    "id": "507f1f77bcf86cd799439011",
+    "filename": "file-1637258400000-123456789.mp3",
+    "originalFilename": "audio.mp3",
+    "mimetype": "audio/mpeg",
+    "size": 2048576,
+    "uploadDate": "2025-11-19T20:00:00.000Z",
+    "status": "uploaded"
+  }
+}
+```
+
+**Error Responses:**
+- `400 Bad Request`: No file uploaded, invalid file type, or file too large
+- `401 Unauthorized`: Missing or invalid JWT token
+
+**Validation Rules:**
+- Allowed MIME types: `audio/mpeg`, `audio/wav`, `audio/x-wav`, `video/mp4`, `audio/mp4`, `audio/x-m4a`
+- Maximum file size: 100MB
+- Allowed extensions: `.mp3`, `.wav`, `.mp4`, `.m4a`
+
+**Storage:**
+- Files stored in: `MEDIA_STORAGE_PATH` (default: `./uploads`)
+- Filename format: `file-{timestamp}-{random}.{ext}`
+- Metadata stored in MongoDB
+
 ## Project Structure
 
 ```
@@ -205,24 +268,37 @@ textifying-speaking/
 │   ├── src/
 │   │   ├── auth/            # Authentication module
 │   │   │   ├── dto/         # Data Transfer Objects
+│   │   │   ├── guards/      # JWT AuthGuard
+│   │   │   ├── strategies/  # JWT Strategy
 │   │   │   ├── auth.controller.ts
 │   │   │   ├── auth.service.ts
 │   │   │   └── auth.module.ts
 │   │   ├── users/           # Users module
-│   │   │   ├── schemas/     # MongoDB schemas
+│   │   │   ├── schemas/     # MongoDB schemas (User)
 │   │   │   ├── users.service.ts
 │   │   │   └── users.module.ts
+│   │   ├── media/           # Media upload module
+│   │   │   ├── schemas/     # MongoDB schemas (MediaFile)
+│   │   │   ├── media.controller.ts
+│   │   │   ├── media.service.ts
+│   │   │   └── media.module.ts
 │   │   ├── app.module.ts    # Main application module
 │   │   └── main.ts          # Application entry point
 │   ├── test/                # E2E tests
+│   ├── uploads/             # Uploaded files storage
 │   ├── Dockerfile
 │   └── package.json
 ├── ts-front/                 # React Frontend
 │   ├── src/
+│   │   ├── components/
+│   │   │   └── Navbar.jsx   # Navigation with auth UI
 │   │   ├── pages/
 │   │   │   ├── Register.jsx # Registration page
 │   │   │   ├── Login.jsx    # Login page
+│   │   │   ├── Upload.jsx   # File upload page
 │   │   │   └── HealthCheck.jsx
+│   │   ├── store/
+│   │   │   └── authStore.js # Zustand auth state
 │   │   ├── App.jsx          # Main app component & routes
 │   │   └── main.jsx         # Application entry point
 │   ├── Dockerfile
@@ -301,6 +377,35 @@ docker exec ts-backend npm run test:cov
      -d '{"email":"nonexistent@example.com","password":"password123"}'
    ```
 
+#### File Upload Tests
+
+1. **Upload Audio File (requires authentication):**
+   ```bash
+   # First, login and get token
+   TOKEN=$(curl -s -X POST http://localhost:3001/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"email":"test@example.com","password":"password123"}' \
+     | jq -r '.accessToken')
+   
+   # Then upload file
+   curl -X POST http://localhost:3001/media/upload \
+     -H "Authorization: Bearer $TOKEN" \
+     -F "file=@/path/to/audio.mp3"
+   ```
+
+2. **Upload Without Authentication:**
+   ```bash
+   curl -X POST http://localhost:3001/media/upload \
+     -F "file=@/path/to/audio.mp3"
+   ```
+
+3. **Upload Invalid File Type:**
+   ```bash
+   curl -X POST http://localhost:3001/media/upload \
+     -H "Authorization: Bearer $TOKEN" \
+     -F "file=@/path/to/document.pdf"
+   ```
+
 ## Environment Variables
 
 ### Backend (`ts-back/.env`)
@@ -308,6 +413,7 @@ docker exec ts-backend npm run test:cov
 MONGODB_URI=mongodb://mongodb:27017/textifying-speaking
 JWT_SECRET=your-super-secret-jwt-key-change-in-production
 PORT=3001
+MEDIA_STORAGE_PATH=./uploads
 ```
 
 ### Docker Compose
