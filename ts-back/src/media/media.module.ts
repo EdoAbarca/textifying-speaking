@@ -1,10 +1,13 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { MulterModule } from '@nestjs/platform-express';
+import { JwtModule } from '@nestjs/jwt';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { MediaController } from './media.controller';
 import { MediaService } from './media.service';
+import { MediaGateway } from './media.gateway';
 import { MediaFile, MediaFileSchema } from './schemas/media-file.schema';
 
 const ALLOWED_MIMETYPES = [
@@ -47,9 +50,17 @@ const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
         fileSize: MAX_FILE_SIZE,
       },
     }),
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) => ({
+        secret: configService.get<string>('JWT_SECRET'),
+        signOptions: { expiresIn: '1h' },
+      }),
+      inject: [ConfigService],
+    }),
   ],
   controllers: [MediaController],
-  providers: [MediaService],
+  providers: [MediaService, MediaGateway],
   exports: [MediaService],
 })
 export class MediaModule {}

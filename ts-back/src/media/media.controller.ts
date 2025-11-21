@@ -3,7 +3,9 @@ import {
   Post,
   Get,
   Delete,
+  Patch,
   Param,
+  Body,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -18,12 +20,16 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { MediaService } from './media.service';
+import { MediaGateway } from './media.gateway';
 import { MulterExceptionFilter } from './filters/multer-exception.filter';
 
 @Controller('media')
 @UseFilters(MulterExceptionFilter)
 export class MediaController {
-  constructor(private readonly mediaService: MediaService) {}
+  constructor(
+    private readonly mediaService: MediaService,
+    private readonly mediaGateway: MediaGateway,
+  ) {}
 
   @Post('upload')
   @HttpCode(HttpStatus.CREATED)
@@ -42,6 +48,18 @@ export class MediaController {
       file,
     );
 
+    // Emit real-time update for file upload completion
+    this.mediaGateway.emitFileStatusUpdate(req.user.sub, {
+      id: mediaFile._id.toString(),
+      filename: mediaFile.filename,
+      originalFilename: mediaFile.originalFilename,
+      mimetype: mediaFile.mimetype,
+      size: mediaFile.size,
+      uploadDate: mediaFile.uploadDate,
+      status: mediaFile.status,
+      progress: mediaFile.progress,
+    });
+
     return {
       message: 'File uploaded successfully',
       file: {
@@ -52,6 +70,7 @@ export class MediaController {
         size: mediaFile.size,
         uploadDate: mediaFile.uploadDate,
         status: mediaFile.status,
+        progress: mediaFile.progress,
       },
     };
   }
@@ -71,6 +90,8 @@ export class MediaController {
         size: file.size,
         uploadDate: file.uploadDate,
         status: file.status,
+        progress: file.progress,
+        errorMessage: file.errorMessage,
       })),
     };
   }
@@ -94,6 +115,66 @@ export class MediaController {
 
     return {
       message: 'File deleted successfully',
+    };
+  }
+
+  @Patch(':id/status')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  async updateFileStatus(
+    @Param('id') id: string,
+    @Body() body: { status: string; progress?: number; errorMessage?: string },
+    @Request() req,
+  ) {
+    const file = await this.mediaService.findById(id);
+
+    if (!file) {
+      throw new NotFoundException('File not found');
+    }
+
+    // Verify file ownership
+    if (file.userId.toString() !== req.user.sub) {
+      throw new ForbiddenException('You do not have permission to update this file');
+    }
+
+    // Validate status
+    const validStatuses = ['uploading', 'ready', 'processing', 'completed', 'error'];
+    if (!validStatuses.includes(body.status)) {
+      throw new BadRequestException('Invalid status value');
+    }
+
+    const updatedFile = await this.mediaService.updateFileStatus(
+      id,
+      body.status as any,
+      body.progress,
+      body.errorMessage,
+    );
+
+    if (!updatedFile) {
+      throw new NotFoundException('File not found');
+    }
+
+    // Emit real-time update
+    this.mediaGateway.emitFileStatusUpdate(req.user.sub, {
+      id: updatedFile._id.toString(),
+      filename: updatedFile.filename,
+      originalFilename: updatedFile.originalFilename,
+      mimetype: updatedFile.mimetype,
+      size: updatedFile.size,
+      uploadDate: updatedFile.uploadDate,
+      status: updatedFile.status,
+      progress: updatedFile.progress,
+      errorMessage: updatedFile.errorMessage,
+    });
+
+    return {
+      message: 'File status updated successfully',
+      file: {
+        id: updatedFile._id,
+        status: updatedFile.status,
+        progress: updatedFile.progress,
+        errorMessage: updatedFile.errorMessage,
+      },
     };
   }
 }

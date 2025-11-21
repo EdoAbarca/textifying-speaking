@@ -26,8 +26,17 @@ export class MediaFile {
   @Prop({ default: Date.now })
   uploadDate: Date;
 
-  @Prop({ default: 'uploaded', enum: ['uploaded', 'processing', 'completed', 'failed'] })
+  @Prop({ 
+    default: 'ready', 
+    enum: ['uploading', 'ready', 'processing', 'completed', 'error'] 
+  })
   status: string;
+
+  @Prop({ default: 0, min: 0, max: 100 })
+  progress: number;
+
+  @Prop()
+  errorMessage?: string;
 }
 
 export const MediaFileSchema = SchemaFactory.createForClass(MediaFile);

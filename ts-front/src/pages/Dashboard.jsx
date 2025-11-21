@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from '@iconify/react';
 import { toast } from 'react-toastify';
 import axios from 'axios';
 import useAuthStore from '../store/authStore';
+import { useFileStatus } from '../hooks/useFileStatus';
 
 export default function Dashboard() {
   const [files, setFiles] = useState([]);
@@ -15,6 +16,53 @@ export default function Dashboard() {
   const [deleting, setDeleting] = useState(false);
   const { token } = useAuthStore();
   const navigate = useNavigate();
+
+  // Handle real-time file status updates
+  const handleFileStatusUpdate = useCallback((updatedFile) => {
+    setFiles((prevFiles) => {
+      const existingFileIndex = prevFiles.findIndex(f => f.id === updatedFile.id);
+      
+      if (existingFileIndex >= 0) {
+        // Update existing file
+        const newFiles = [...prevFiles];
+        newFiles[existingFileIndex] = { ...newFiles[existingFileIndex], ...updatedFile };
+        return newFiles;
+      } else {
+        // Add new file
+        return [updatedFile, ...prevFiles];
+      }
+    });
+
+    // Update selected file if it's the one being viewed
+    setSelectedFile((prevSelectedFile) => {
+      if (prevSelectedFile && prevSelectedFile.id === updatedFile.id) {
+        return { ...prevSelectedFile, ...updatedFile };
+      }
+      return prevSelectedFile;
+    });
+
+    // Show toast notification for status changes
+    if (updatedFile.status === 'completed') {
+      toast.success(`File "${updatedFile.originalFilename}" is ready!`);
+    } else if (updatedFile.status === 'error') {
+      toast.error(`Error processing "${updatedFile.originalFilename}": ${updatedFile.errorMessage || 'Unknown error'}`);
+    }
+  }, []);
+
+  const handleFileProgress = useCallback((progressData) => {
+    setFiles((prevFiles) => {
+      const fileIndex = prevFiles.findIndex(f => f.id === progressData.fileId);
+      if (fileIndex >= 0) {
+        const newFiles = [...prevFiles];
+        newFiles[fileIndex] = { ...newFiles[fileIndex], progress: progressData.progress };
+        return newFiles;
+      }
+      return prevFiles;
+    });
+  }, []);
+
+  // Initialize WebSocket connection
+  const { isConnected } = useFileStatus(handleFileStatusUpdate, handleFileProgress);
 
   useEffect(() => {
     if (!token) {
@@ -123,7 +171,15 @@ export default function Dashboard() {
       <div className="max-w-7xl mx-auto">
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
           <div className="flex items-center justify-between mb-6">
-            <h1 className="text-3xl font-bold text-gray-800">My Files</h1>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-800">My Files</h1>
+              <div className="flex items-center gap-2 mt-2">
+                <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                <span className="text-sm text-gray-600">
+                  {isConnected ? 'Real-time updates active' : 'Connecting...'}
+                </span>
+              </div>
+            </div>
             <button
               onClick={fetchFiles}
               className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
@@ -178,14 +234,24 @@ export default function Dashboard() {
                   </div>
 
                   <div className="flex items-center justify-between mb-3">
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      file.status === 'uploaded' ? 'bg-green-100 text-green-700' :
-                      file.status === 'processing' ? 'bg-yellow-100 text-yellow-700' :
-                      file.status === 'completed' ? 'bg-blue-100 text-blue-700' :
-                      'bg-red-100 text-red-700'
-                    }`}>
-                      {file.status.charAt(0).toUpperCase() + file.status.slice(1)}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs px-2 py-1 rounded-full flex items-center gap-1 ${
+                        file.status === 'uploading' ? 'bg-purple-100 text-purple-700' :
+                        file.status === 'ready' ? 'bg-green-100 text-green-700' :
+                        file.status === 'processing' ? 'bg-yellow-100 text-yellow-700' :
+                        file.status === 'completed' ? 'bg-blue-100 text-blue-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {file.status === 'uploading' && <Icon icon="mdi:loading" className="animate-spin" width={12} />}
+                        {file.status === 'processing' && <Icon icon="mdi:cog" className="animate-spin" width={12} />}
+                        {file.status === 'completed' && <Icon icon="mdi:check-circle" width={12} />}
+                        {file.status === 'error' && <Icon icon="mdi:alert-circle" width={12} />}
+                        {file.status.charAt(0).toUpperCase() + file.status.slice(1)}
+                      </span>
+                      {file.status === 'processing' && file.progress !== undefined && (
+                        <span className="text-xs text-gray-500">{file.progress}%</span>
+                      )}
+                    </div>
                     <span className="text-xs text-gray-500">{file.mimetype.split('/')[1].toUpperCase()}</span>
                   </div>
 
@@ -263,15 +329,42 @@ export default function Dashboard() {
 
                 <div>
                   <p className="text-sm text-gray-500 mb-1">Status</p>
-                  <span className={`inline-block px-3 py-1 rounded-full text-sm ${
-                    selectedFile.status === 'uploaded' ? 'bg-green-100 text-green-700' :
+                  <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm ${
+                    selectedFile.status === 'uploading' ? 'bg-purple-100 text-purple-700' :
+                    selectedFile.status === 'ready' ? 'bg-green-100 text-green-700' :
                     selectedFile.status === 'processing' ? 'bg-yellow-100 text-yellow-700' :
                     selectedFile.status === 'completed' ? 'bg-blue-100 text-blue-700' :
                     'bg-red-100 text-red-700'
                   }`}>
+                    {selectedFile.status === 'uploading' && <Icon icon="mdi:loading" className="animate-spin" width={16} />}
+                    {selectedFile.status === 'processing' && <Icon icon="mdi:cog" className="animate-spin" width={16} />}
+                    {selectedFile.status === 'completed' && <Icon icon="mdi:check-circle" width={16} />}
+                    {selectedFile.status === 'error' && <Icon icon="mdi:alert-circle" width={16} />}
                     {selectedFile.status.charAt(0).toUpperCase() + selectedFile.status.slice(1)}
                   </span>
                 </div>
+
+                {selectedFile.progress !== undefined && selectedFile.progress > 0 && (
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Progress</p>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${selectedFile.progress}%` }}
+                        />
+                      </div>
+                      <span className="text-sm text-gray-700 font-medium">{selectedFile.progress}%</span>
+                    </div>
+                  </div>
+                )}
+
+                {selectedFile.errorMessage && (
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Error Message</p>
+                    <p className="text-red-600 text-sm">{selectedFile.errorMessage}</p>
+                  </div>
+                )}
               </div>
 
               <div className="mt-6 pt-6 border-t border-gray-200 flex gap-3">

@@ -23,7 +23,8 @@ export class MediaService {
       path: file.path,
       size: file.size,
       uploadDate: new Date(),
-      status: 'uploaded',
+      status: 'ready',
+      progress: 100,
     });
 
     return mediaFile.save();
@@ -58,5 +59,35 @@ export class MediaService {
 
     // Delete from database
     await this.deleteById(id);
+  }
+
+  async updateFileStatus(
+    id: string,
+    status: 'uploading' | 'ready' | 'processing' | 'completed' | 'error',
+    progress?: number,
+    errorMessage?: string,
+  ): Promise<MediaFileDocument | null> {
+    const updateData: any = { status };
+    
+    if (progress !== undefined) {
+      updateData.progress = progress;
+    }
+    
+    if (errorMessage !== undefined) {
+      updateData.errorMessage = errorMessage;
+    }
+
+    return this.mediaFileModel
+      .findByIdAndUpdate(id, updateData, { new: true })
+      .exec();
+  }
+
+  async updateFileProgress(
+    id: string,
+    progress: number,
+  ): Promise<MediaFileDocument | null> {
+    return this.mediaFileModel
+      .findByIdAndUpdate(id, { progress }, { new: true })
+      .exec();
   }
 }
