@@ -6,22 +6,28 @@
 
 ## Features
 
-### 🔐 User Authentication (US-01)
-- **User Registration**: Secure user registration with email and password
+### 🔐 User Authentication
+- **User Registration (US-01)**: Secure user registration with email and password
   - Username validation (3-30 characters)
   - Email format validation
   - Password strength enforcement (minimum 8 characters)
   - Secure password hashing using bcrypt
   - Duplicate email/username detection
   - Success modal with navigation options
-- **Coming Soon**: User login (US-02)
+- **User Login (US-02)**: Secure JWT-based authentication
+  - Email and password validation
+  - Bcrypt password verification
+  - JWT token generation (1-hour expiration)
+  - Client-side token storage
+  - Invalid credentials handling
+  - Success notification with automatic redirect
 
 ## Tech Stack
 
 ### Backend
 - **Framework**: NestJS 10.x (TypeScript)
 - **Database**: MongoDB with Mongoose ODM
-- **Authentication**: bcrypt for password hashing
+- **Authentication**: bcrypt for password hashing, JWT for session management
 - **Validation**: class-validator & class-transformer
 - **Configuration**: @nestjs/config for environment variables
 - **Testing**: Jest for unit and E2E tests
@@ -154,6 +160,43 @@ Register a new user account.
 - `email`: Required, valid email format
 - `password`: Required, minimum 8 characters
 
+#### POST `/auth/login`
+Authenticate a user and receive a JWT token.
+
+**Request Body:**
+```json
+{
+  "email": "john@example.com",
+  "password": "securePassword123"
+}
+```
+
+**Success Response (200):**
+```json
+{
+  "message": "Login successful",
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": "507f1f77bcf86cd799439011",
+    "username": "johndoe",
+    "email": "john@example.com"
+  }
+}
+```
+
+**Error Responses:**
+- `400 Bad Request`: Validation errors (missing fields, invalid email format)
+- `401 Unauthorized`: Invalid credentials (wrong email or password)
+
+**Validation Rules:**
+- `email`: Required, valid email format
+- `password`: Required
+
+**JWT Token:**
+- Expiration: 1 hour
+- Payload includes: user ID (`sub`), email, username
+- Store in `localStorage` on client-side for subsequent authenticated requests
+
 ## Project Structure
 
 ```
@@ -178,8 +221,9 @@ textifying-speaking/
 │   ├── src/
 │   │   ├── pages/
 │   │   │   ├── Register.jsx # Registration page
+│   │   │   ├── Login.jsx    # Login page
 │   │   │   └── HealthCheck.jsx
-│   │   ├── App.jsx          # Main app component
+│   │   ├── App.jsx          # Main app component & routes
 │   │   └── main.jsx         # Application entry point
 │   ├── Dockerfile
 │   └── package.json
@@ -211,6 +255,8 @@ docker exec ts-backend npm run test:cov
 
 ### Manual Testing
 
+#### Registration Tests
+
 1. **Registration Success:**
    ```bash
    curl -X POST http://localhost:3001/auth/register \
@@ -232,6 +278,29 @@ docker exec ts-backend npm run test:cov
      -d '{"username":"ab","email":"invalid","password":"short"}'
    ```
 
+#### Login Tests
+
+1. **Login Success:**
+   ```bash
+   curl -X POST http://localhost:3001/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"email":"test@example.com","password":"password123"}'
+   ```
+
+2. **Invalid Credentials:**
+   ```bash
+   curl -X POST http://localhost:3001/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"email":"test@example.com","password":"wrongpassword"}'
+   ```
+
+3. **Non-existent User:**
+   ```bash
+   curl -X POST http://localhost:3001/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"email":"nonexistent@example.com","password":"password123"}'
+   ```
+
 ## Environment Variables
 
 ### Backend (`ts-back/.env`)
@@ -247,14 +316,16 @@ Environment variables are configured in `docker-compose.yml` for containerized d
 ## Security Features
 
 - ✅ Password hashing with bcrypt (salt rounds: 10)
+- ✅ JWT-based authentication with 1-hour token expiration
 - ✅ Input validation (client-side and server-side)
 - ✅ Email uniqueness enforcement
 - ✅ Username uniqueness enforcement
 - ✅ CORS enabled for frontend communication
 - ✅ MongoDB connection security
-- 🔜 JWT authentication (coming in US-02)
+- ✅ Secure credential verification (constant-time comparison via bcrypt)
 - 🔜 Rate limiting (future enhancement)
 - 🔜 Email verification (future enhancement)
+- 🔜 Refresh tokens (future enhancement)
 
 ## Development Notes
 
