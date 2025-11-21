@@ -27,12 +27,13 @@ ts-back/          # NestJS backend (TypeScript)
       schemas/    # MongoDB schemas (User)
       users.service.ts
       users.module.ts
-    media/        # Media upload module
+    media/        # Media upload & status module
       schemas/    # MongoDB schemas (MediaFile)
         media-file.schema.ts
       media.controller.ts
       media.service.ts
       media.service.spec.ts
+      media.gateway.ts # WebSocket gateway for real-time updates
       media.module.ts
     app.module.ts # Main module with MongoDB & Config
     main.ts       # Entry point with ValidationPipe
@@ -40,14 +41,20 @@ ts-back/          # NestJS backend (TypeScript)
     auth-register.e2e-spec.ts
     auth-login.e2e-spec.ts
     media-upload.e2e-spec.ts
+    media-list.e2e-spec.ts
+    media-delete.e2e-spec.ts
+    media-status.e2e-spec.ts
   uploads/        # Uploaded files storage
 ts-front/         # React frontend (JSX, not TypeScript)
   src/
     components/   # Shared components
       Navbar.jsx  # Navigation with auth-aware UI & upload button
+    hooks/        # Custom React hooks
+      useFileStatus.js # WebSocket hook for real-time status updates
     pages/        # Page components
       Register.jsx
       Login.jsx
+      Dashboard.jsx # File list with real-time status updates
       Upload.jsx  # File upload page
       HealthCheck.jsx
     store/        # Zustand state management
@@ -318,3 +325,61 @@ curl -X POST http://localhost:3001/media/upload \
   - Loading states during data fetch and deletion
   - Responsive grid layout (1 column mobile, 2 tablet, 3 desktop)
   - Gradient background with TailwindCSS
+
+### US-05: See File Upload Current Status ✅
+- **Backend**:
+  - MediaFile schema extended with status enum (uploading, ready, processing, completed, error)
+  - Progress field (0-100) for tracking transcription/processing progress
+  - Error message field for storing error details
+  - PATCH `/media/:id/status` endpoint with JWT authentication for status updates
+  - Status transition validation (only valid enum values accepted)
+  - Ownership validation before status updates (403 if user doesn't own file)
+  - WebSocket gateway (Socket.IO) on `/media` namespace for real-time updates
+  - JWT authentication for WebSocket connections via handshake
+  - User-scoped WebSocket connections (users only receive updates for their own files)
+  - Real-time event emission on status changes (`fileStatusUpdate` event)
+  - Real-time progress updates (`fileProgress` event)
+  - File upload sets initial status to 'ready' with 100% progress
+  - Unit tests for status update methods (updateFileStatus, updateFileProgress)
+  - E2E tests for status endpoint (all status transitions, auth, ownership, validation)
+- **Frontend**:
+  - Socket.IO client integration for real-time updates
+  - Custom `useFileStatus` hook for WebSocket connection management
+  - Automatic connection/disconnection based on authentication
+  - Real-time file status updates without page refresh
+  - Dashboard displays connection status indicator (green dot when connected)
+  - Status badges with icons and colors for each state:
+    - uploading: purple with spinner icon
+    - ready: green with no icon
+    - processing: yellow with spinning cog icon + progress percentage
+    - completed: blue with checkmark icon
+    - error: red with alert icon
+  - Progress bar visualization in file details modal
+  - Error message display for files in error state
+  - Upload page already has progress tracking (inherited from US-03)
+  - Toast notifications for completed files and errors
+  - Smooth UI updates via React state management
+- **Testing**:
+  - Test script (`test-us-05.sh`) for end-to-end status transitions
+  - Manual testing instructions for browser-based real-time updates
+  - All tests passing (unit, E2E, integration)
+- **API Examples**:
+  ```bash
+  # Update file status to processing
+  curl -X PATCH http://localhost:3001/media/{fileId}/status \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"status":"processing","progress":50}'
+  
+  # Update file status to completed
+  curl -X PATCH http://localhost:3001/media/{fileId}/status \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"status":"completed","progress":100}'
+  
+  # Update file status to error
+  curl -X PATCH http://localhost:3001/media/{fileId}/status \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"status":"error","errorMessage":"Transcription failed"}'
+  ```

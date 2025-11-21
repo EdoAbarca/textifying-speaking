@@ -45,6 +45,25 @@
   - Empty state with upload CTA
   - JWT-protected endpoints (authentication required)
 
+- **Real-Time File Status Updates (US-05)**: Monitor file processing in real-time
+  - WebSocket-based real-time status updates using Socket.IO
+  - Status indicators: uploading, ready, processing, completed, error
+  - Progress tracking (0-100%) for files being processed
+  - Connection status indicator in dashboard
+  - Automatic UI updates without page refresh
+  - Status badges with animated icons:
+    - Uploading: Purple with spinner
+    - Ready: Green
+    - Processing: Yellow with spinning cog + progress percentage
+    - Completed: Blue with checkmark
+    - Error: Red with alert icon
+  - Progress bar visualization in file details modal
+  - Error message display for failed operations
+  - Toast notifications for completed files and errors
+  - JWT-secured WebSocket connections
+  - User-scoped updates (only see your own file updates)
+  - Status update API endpoint for testing/integration
+
 ## Tech Stack
 
 ### Backend
@@ -52,6 +71,7 @@
 - **Database**: MongoDB with Mongoose ODM
 - **Authentication**: bcrypt for password hashing, JWT for session management
 - **File Upload**: Multer for multipart form data handling
+- **Real-Time Communication**: Socket.IO with @nestjs/websockets & @nestjs/platform-socket.io
 - **Validation**: class-validator & class-transformer
 - **Configuration**: @nestjs/config for environment variables
 - **Testing**: Jest for unit and E2E tests
@@ -61,6 +81,7 @@
 - **Routing**: React Router DOM 7
 - **Styling**: TailwindCSS 4
 - **HTTP Client**: Axios for API requests & file uploads
+- **Real-Time Communication**: Socket.IO client (socket.io-client)
 - **Form Validation**: Yup for schema-based validation
 - **State Management**: Zustand with persist middleware
 - **Notifications**: React Toastify
@@ -530,6 +551,65 @@ docker exec ts-backend npm run test:cov
    - View empty state with "Upload Your First File" button when no files exist
    - Use "Refresh" button to manually reload file list
 
+#### Real-Time Status Updates Tests
+
+1. **Update File Status to Processing:**
+   ```bash
+   # Get authentication token and file ID
+   TOKEN=$(curl -s -X POST http://localhost:3001/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"email":"test@example.com","password":"password123"}' \
+     | grep -o '"accessToken":"[^"]*' | cut -d'"' -f4)
+   
+   FILE_ID="your-file-id-here"
+   
+   # Update status to processing with 50% progress
+   curl -X PATCH http://localhost:3001/media/${FILE_ID}/status \
+     -H "Authorization: Bearer $TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"status":"processing","progress":50}'
+   ```
+
+2. **Update File Status to Completed:**
+   ```bash
+   curl -X PATCH http://localhost:3001/media/${FILE_ID}/status \
+     -H "Authorization: Bearer $TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"status":"completed","progress":100}'
+   ```
+
+3. **Update File Status to Error:**
+   ```bash
+   curl -X PATCH http://localhost:3001/media/${FILE_ID}/status \
+     -H "Authorization: Bearer $TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"status":"error","errorMessage":"Transcription service unavailable"}'
+   ```
+
+4. **Run Automated Test Script:**
+   ```bash
+   # Run the complete US-05 test workflow
+   ./test-us-05.sh
+   ```
+   This script automatically tests:
+   - User registration and login
+   - File upload with initial status
+   - Status transitions (ready → processing → completed)
+   - Progress tracking
+   - WebSocket real-time updates
+
+5. **Test Real-Time Updates in Browser:**
+   - Open two browser windows side-by-side
+   - Navigate to http://localhost:5173 in both
+   - Login with the same user in both windows
+   - Upload a file in one window
+   - Observe the dashboard in both windows for real-time updates
+   - Use the API (curl or test script) to change file status
+   - Watch the dashboard update automatically without page refresh
+   - Check the connection indicator (green dot = connected, red = disconnected)
+   - Observe different status colors and animated icons
+   - View progress percentage for files in "processing" state
+
 ## Environment Variables
 
 ### Backend (`ts-back/.env`)
@@ -551,7 +631,10 @@ Environment variables are configured in `docker-compose.yml` for containerized d
 - ✅ Email uniqueness enforcement
 - ✅ Username uniqueness enforcement
 - ✅ File ownership validation (users can only delete their own files)
+- ✅ Status update ownership validation (users can only update their own files)
 - ✅ Protected routes (authentication required for sensitive operations)
+- ✅ JWT-secured WebSocket connections (authentication required for real-time updates)
+- ✅ User-scoped WebSocket broadcasts (users only receive updates for their own files)
 - ✅ CORS enabled for frontend communication
 - ✅ MongoDB connection security
 - ✅ Secure credential verification (constant-time comparison via bcrypt)
