@@ -15,7 +15,8 @@ describe('MediaService', () => {
     path: '/uploads/file-123456.mp3',
     size: 1024,
     uploadDate: new Date(),
-    status: 'uploaded',
+    status: 'ready',
+    progress: 100,
   };
 
   const mockSave = jest.fn().mockResolvedValue(mockMediaFile);
@@ -171,6 +172,77 @@ describe('MediaService', () => {
       });
 
       await expect(service.deleteFileById(fileId)).rejects.toThrow('File not found in database');
+    });
+  });
+
+  describe('updateFileStatus', () => {
+    it('should update file status successfully', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+      const updatedFile = { ...mockMediaFile, status: 'processing', progress: 50 };
+
+      mockMediaFileModel.findByIdAndUpdate = jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue(updatedFile),
+      });
+
+      const result = await service.updateFileStatus(fileId, 'processing', 50);
+
+      expect(mockMediaFileModel.findByIdAndUpdate).toHaveBeenCalledWith(
+        fileId,
+        { status: 'processing', progress: 50 },
+        { new: true },
+      );
+      expect(result).toEqual(updatedFile);
+    });
+
+    it('should update file status with error message', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+      const errorMessage = 'Upload failed';
+      const updatedFile = { ...mockMediaFile, status: 'error', errorMessage };
+
+      mockMediaFileModel.findByIdAndUpdate = jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue(updatedFile),
+      });
+
+      const result = await service.updateFileStatus(fileId, 'error', undefined, errorMessage);
+
+      expect(mockMediaFileModel.findByIdAndUpdate).toHaveBeenCalledWith(
+        fileId,
+        { status: 'error', errorMessage },
+        { new: true },
+      );
+      expect(result).toEqual(updatedFile);
+    });
+
+    it('should return null if file not found', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+
+      mockMediaFileModel.findByIdAndUpdate = jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue(null),
+      });
+
+      const result = await service.updateFileStatus(fileId, 'completed');
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('updateFileProgress', () => {
+    it('should update file progress successfully', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+      const updatedFile = { ...mockMediaFile, progress: 75 };
+
+      mockMediaFileModel.findByIdAndUpdate = jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue(updatedFile),
+      });
+
+      const result = await service.updateFileProgress(fileId, 75);
+
+      expect(mockMediaFileModel.findByIdAndUpdate).toHaveBeenCalledWith(
+        fileId,
+        { progress: 75 },
+        { new: true },
+      );
+      expect(result).toEqual(updatedFile);
     });
   });
 });
