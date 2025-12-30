@@ -37,6 +37,9 @@ export class MediaFile {
 
   @Prop()
   errorMessage?: string;
+
+  @Prop()
+  transcribedText?: string;
 }
 
 export const MediaFileSchema = SchemaFactory.createForClass(MediaFile);
