@@ -2,7 +2,7 @@
 
 ## Description
 
-*Textifying Speaking* is a full-stack web application that automates the transcription of audio and video files, offering the option to generate summaries of the obtained transcriptions. This tool is ideal for students, professionals, and anyone who needs to convert multimedia content into text and obtain summaries from them.
+*Textifying Speaking* is a local full-stack web application that automates the transcription of audio and video files, offering the option to generate summaries of the obtained transcriptions. This tool is ideal for students, professionals, and anyone who needs to convert multimedia content into text and obtain summaries from them.
 
 ## Features
 
@@ -64,6 +64,25 @@
   - User-scoped updates (only see your own file updates)
   - Status update API endpoint for testing/integration
 
+- **Audio/Video Transcription (US-06)**: Transcribe media files to text
+  - One-click transcription initiation from dashboard
+  - "Transcribe" button for files in 'ready' status
+  - Async transcription processing (non-blocking)
+  - HuggingFace Whisper (medium) model for speech recognition
+  - Python-based transcription service (Flask + Transformers)
+  - Real-time status updates via WebSocket
+  - Status progression: ready → processing → completed/error
+  - Transcribed text stored in database
+  - View transcribed text in modal with copy-to-clipboard
+  - File ownership validation (users can only transcribe their own files)
+  - File type validation (audio/video only)
+  - Duplicate transcription prevention
+  - Error handling with descriptive messages
+  - Support for multiple audio formats (MP3, WAV, M4A, MP4)
+  - GPU acceleration support when available
+  - Containerized transcription service with Docker
+  - JWT-protected transcription endpoint
+
 ## Tech Stack
 
 ### Backend
@@ -72,9 +91,18 @@
 - **Authentication**: bcrypt for password hashing, JWT for session management
 - **File Upload**: Multer for multipart form data handling
 - **Real-Time Communication**: Socket.IO with @nestjs/websockets & @nestjs/platform-socket.io
+- **HTTP Client**: axios for service-to-service communication
 - **Validation**: class-validator & class-transformer
 - **Configuration**: @nestjs/config for environment variables
 - **Testing**: Jest for unit and E2E tests
+
+### Transcription Service
+- **Language**: Python 3.11
+- **Framework**: Flask 3.0
+- **AI Model**: OpenAI Whisper (small) via HuggingFace Transformers
+- **ML Libraries**: PyTorch, Transformers, Accelerate
+- **Audio Processing**: FFmpeg
+- **Container**: Python 3.11-slim Docker image
 
 ### Frontend
 - **Framework**: React 19 + Vite 7
@@ -89,14 +117,13 @@
 
 ### DevOps
 - **Containerization**: Docker & Docker Compose
-- **Services**: Frontend (port 5173), Backend (port 3001), MongoDB (port 27017)
+- **Services**: Frontend (port 5173), Backend (port 3001), Transcription (port 5000), MongoDB (port 27017)
 - **Build Tool**: Makefile for common tasks
 
 ## Quick Start
 
 ### Prerequisites
 - Docker and Docker Compose V2
-- Node.js 20+ (for local development)
 - Make (optional, for using Makefile commands)
 
 ### Using Docker (Recommended)
@@ -147,27 +174,6 @@ make db-shell
 
 # Clean up (removes volumes)
 make clean
-```
-
-### Local Development (Without Docker)
-
-```bash
-# Install all dependencies
-make install
-# OR
-cd ts-back && npm install
-cd ../ts-front && npm install
-
-# Set up environment variables
-# Create ts-back/.env file with:
-# MONGODB_URI=mongodb://localhost:27017/textifying-speaking
-# JWT_SECRET=your-secret-key
-
-# Start backend (in ts-back/)
-npm run start:dev
-
-# Start frontend (in ts-front/)
-npm run dev
 ```
 
 ## API Documentation
@@ -364,6 +370,116 @@ curl -X DELETE http://localhost:3001/media/507f1f77bcf86cd799439011 \
 - Deletes both physical file from storage and database record
 - If physical file is missing, continues with database deletion (logs error)
 
+#### PATCH `/media/:id/status`
+Update the processing status of a file.
+
+**Authentication:** Required (Bearer JWT token)
+
+**Path Parameters:**
+- `id`: File ID (MongoDB ObjectId)
+
+**Request Body:**
+```json
+{
+  "status": "processing",
+  "progress": 50,
+  "errorMessage": "Optional error message"
+}
+```
+
+**Example (curl):**
+```bash
+curl -X PATCH http://localhost:3001/media/507f1f77bcf86cd799439011/status \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"processing","progress":50}'
+```
+
+**Success Response (200):**
+```json
+{
+  "message": "File status updated successfully",
+  "file": {
+    "id": "507f1f77bcf86cd799439011",
+    "status": "processing",
+    "progress": 50
+  }
+}
+```
+
+**Error Responses:**
+- `400 Bad Request`: Invalid status value
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: User does not own the file
+- `404 Not Found`: File not found
+
+**Valid Status Values:**
+- `uploading`: File is being uploaded
+- `ready`: File is ready for processing
+- `processing`: File is being transcribed
+- `completed`: Transcription completed successfully
+- `error`: An error occurred during processing
+
+**Behavior:**
+- Validates file ownership before updating
+- Emits real-time WebSocket update to user
+- Updates status, progress, and optional error message
+
+#### POST `/media/:id/transcribe`
+Initiate transcription for an audio/video file.
+
+**Authentication:** Required (Bearer JWT token)
+
+**Path Parameters:**
+- `id`: File ID (MongoDB ObjectId)
+
+**Example (curl):**
+```bash
+curl -X POST http://localhost:3001/media/507f1f77bcf86cd799439011/transcribe \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Success Response (200):**
+```json
+{
+  "message": "Transcription started",
+  "file": {
+    "id": "507f1f77bcf86cd799439011",
+    "status": "processing"
+  }
+}
+```
+
+**Error Responses:**
+- `400 Bad Request`: File is not an audio/video file
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: User does not own the file
+- `404 Not Found`: File not found
+- `500 Internal Server Error`: File is already processing or completed, transcription service error
+
+**Behavior:**
+- Validates file ownership and type (audio/video only)
+- Checks file status (rejects if already processing or completed)
+- Updates status to `processing` immediately
+- Sends file to Python transcription service asynchronously
+- Emits real-time WebSocket updates during processing
+- On success: stores transcribed text, updates status to `completed`
+- On failure: updates status to `error` with error message
+- Returns immediately (transcription happens in background)
+
+**Supported MIME Types:**
+- `audio/mpeg` (MP3)
+- `audio/wav` (WAV)
+- `audio/mp4` (M4A)
+- `video/mp4` (MP4)
+- `audio/x-m4a` (M4A)
+
+**Transcription Service:**
+- Uses OpenAI Whisper (small) model via HuggingFace
+- Supports GPU acceleration when available
+- Timeout: 5 minutes per file
+- Automatic chunking for long audio (30-second chunks)
+
 ## Project Structure
 
 ```
@@ -381,10 +497,12 @@ textifying-speaking/
 │   │   │   ├── schemas/     # MongoDB schemas (User)
 │   │   │   ├── users.service.ts
 │   │   │   └── users.module.ts
-│   │   ├── media/           # Media upload module
+│   │   ├── media/           # Media upload & transcription module
 │   │   │   ├── schemas/     # MongoDB schemas (MediaFile)
+│   │   │   ├── filters/     # Exception filters
 │   │   │   ├── media.controller.ts
 │   │   │   ├── media.service.ts
+│   │   │   ├── media.gateway.ts  # WebSocket gateway
 │   │   │   └── media.module.ts
 │   │   ├── app.module.ts    # Main application module
 │   │   └── main.ts          # Application entry point
@@ -395,12 +513,14 @@ textifying-speaking/
 ├── ts-front/                 # React Frontend
 │   ├── src/
 │   │   ├── components/
-│   │   │   └── Navbar.jsx   # Navigation with auth UI & Dashboard link
+│   │   │   └── Navbar.jsx   # Navigation with auth UI & upload/dashboard links
+│   │   ├── hooks/
+│   │   │   └── useFileStatus.js  # WebSocket hook for real-time updates
 │   │   ├── pages/
 │   │   │   ├── Register.jsx # Registration page
 │   │   │   ├── Login.jsx    # Login page
 │   │   │   ├── Upload.jsx   # File upload page
-│   │   │   ├── Dashboard.jsx # File management dashboard
+│   │   │   ├── Dashboard.jsx # File management & transcription dashboard
 │   │   │   └── HealthCheck.jsx
 │   │   ├── store/
 │   │   │   └── authStore.js # Zustand auth state
@@ -408,6 +528,11 @@ textifying-speaking/
 │   │   └── main.jsx         # Application entry point
 │   ├── Dockerfile
 │   └── package.json
+├── ts-transcription/         # Python Transcription Service
+│   ├── app.py               # Flask application with Whisper model
+│   ├── requirements.txt     # Python dependencies
+│   ├── Dockerfile           # Container with PyTorch & Transformers
+│   └── README.md            # Service documentation
 ├── docker-compose.yml        # Docker services configuration
 ├── Makefile                  # Development commands
 └── README.md                 # This file
@@ -434,181 +559,6 @@ make test-backend-cov
 docker exec ts-backend npm run test:cov
 ```
 
-### Manual Testing
-
-#### Registration Tests
-
-1. **Registration Success:**
-   ```bash
-   curl -X POST http://localhost:3001/auth/register \
-     -H "Content-Type: application/json" \
-     -d '{"username":"testuser","email":"test@example.com","password":"password123"}'
-   ```
-
-2. **Duplicate Email:**
-   ```bash
-   curl -X POST http://localhost:3001/auth/register \
-     -H "Content-Type: application/json" \
-     -d '{"username":"testuser2","email":"test@example.com","password":"password123"}'
-   ```
-
-3. **Invalid Input:**
-   ```bash
-   curl -X POST http://localhost:3001/auth/register \
-     -H "Content-Type: application/json" \
-     -d '{"username":"ab","email":"invalid","password":"short"}'
-   ```
-
-#### Login Tests
-
-1. **Login Success:**
-   ```bash
-   curl -X POST http://localhost:3001/auth/login \
-     -H "Content-Type: application/json" \
-     -d '{"email":"test@example.com","password":"password123"}'
-   ```
-
-2. **Invalid Credentials:**
-   ```bash
-   curl -X POST http://localhost:3001/auth/login \
-     -H "Content-Type: application/json" \
-     -d '{"email":"test@example.com","password":"wrongpassword"}'
-   ```
-
-3. **Non-existent User:**
-   ```bash
-   curl -X POST http://localhost:3001/auth/login \
-     -H "Content-Type: application/json" \
-     -d '{"email":"nonexistent@example.com","password":"password123"}'
-   ```
-
-#### File Upload Tests
-
-1. **Upload Audio File (requires authentication):**
-   ```bash
-   # First, login and get token
-   TOKEN=$(curl -s -X POST http://localhost:3001/auth/login \
-     -H "Content-Type: application/json" \
-     -d '{"email":"test@example.com","password":"password123"}' \
-     | jq -r '.accessToken')
-   
-   # Then upload file
-   curl -X POST http://localhost:3001/media/upload \
-     -H "Authorization: Bearer $TOKEN" \
-     -F "file=@/path/to/audio.mp3"
-   ```
-
-2. **Upload Without Authentication:**
-   ```bash
-   curl -X POST http://localhost:3001/media/upload \
-     -F "file=@/path/to/audio.mp3"
-   ```
-
-3. **Upload Invalid File Type:**
-   ```bash
-   curl -X POST http://localhost:3001/media/upload \
-     -H "Authorization: Bearer $TOKEN" \
-     -F "file=@/path/to/document.pdf"
-   ```
-
-#### Dashboard & File Management Tests
-
-1. **List User Files:**
-   ```bash
-   # Get authentication token
-   TOKEN=$(curl -s -X POST http://localhost:3001/auth/login \
-     -H "Content-Type: application/json" \
-     -d '{"email":"test@example.com","password":"password123"}' \
-     | jq -r '.accessToken')
-
-   # List all files for authenticated user
-   curl -X GET http://localhost:3001/media \
-     -H "Authorization: Bearer $TOKEN"
-   ```
-
-2. **Delete File:**
-   ```bash
-   # Delete a specific file (use file ID from list response)
-   curl -X DELETE http://localhost:3001/media/507f1f77bcf86cd799439011 \
-     -H "Authorization: Bearer $TOKEN"
-   ```
-
-3. **Delete Another User's File (Should Fail):**
-   ```bash
-   # Attempt to delete a file owned by another user
-   # Should return 403 Forbidden
-   curl -X DELETE http://localhost:3001/media/ANOTHER_USER_FILE_ID \
-     -H "Authorization: Bearer $TOKEN"
-   ```
-
-4. **Frontend Dashboard Access:**
-   - Navigate to http://localhost:5173/dashboard
-   - Login if not authenticated (auto-redirects to /login)
-   - View grid of uploaded files with metadata
-   - Click "Details" button to see full file information in modal
-   - Click "Delete" button to remove a file (shows confirmation modal)
-   - Confirm deletion and verify file list updates automatically
-   - View empty state with "Upload Your First File" button when no files exist
-   - Use "Refresh" button to manually reload file list
-
-#### Real-Time Status Updates Tests
-
-1. **Update File Status to Processing:**
-   ```bash
-   # Get authentication token and file ID
-   TOKEN=$(curl -s -X POST http://localhost:3001/auth/login \
-     -H "Content-Type: application/json" \
-     -d '{"email":"test@example.com","password":"password123"}' \
-     | grep -o '"accessToken":"[^"]*' | cut -d'"' -f4)
-   
-   FILE_ID="your-file-id-here"
-   
-   # Update status to processing with 50% progress
-   curl -X PATCH http://localhost:3001/media/${FILE_ID}/status \
-     -H "Authorization: Bearer $TOKEN" \
-     -H "Content-Type: application/json" \
-     -d '{"status":"processing","progress":50}'
-   ```
-
-2. **Update File Status to Completed:**
-   ```bash
-   curl -X PATCH http://localhost:3001/media/${FILE_ID}/status \
-     -H "Authorization: Bearer $TOKEN" \
-     -H "Content-Type: application/json" \
-     -d '{"status":"completed","progress":100}'
-   ```
-
-3. **Update File Status to Error:**
-   ```bash
-   curl -X PATCH http://localhost:3001/media/${FILE_ID}/status \
-     -H "Authorization: Bearer $TOKEN" \
-     -H "Content-Type: application/json" \
-     -d '{"status":"error","errorMessage":"Transcription service unavailable"}'
-   ```
-
-4. **Run Automated Test Script:**
-   ```bash
-   # Run the complete US-05 test workflow
-   ./test-us-05.sh
-   ```
-   This script automatically tests:
-   - User registration and login
-   - File upload with initial status
-   - Status transitions (ready → processing → completed)
-   - Progress tracking
-   - WebSocket real-time updates
-
-5. **Test Real-Time Updates in Browser:**
-   - Open two browser windows side-by-side
-   - Navigate to http://localhost:5173 in both
-   - Login with the same user in both windows
-   - Upload a file in one window
-   - Observe the dashboard in both windows for real-time updates
-   - Use the API (curl or test script) to change file status
-   - Watch the dashboard update automatically without page refresh
-   - Check the connection indicator (green dot = connected, red = disconnected)
-   - Observe different status colors and animated icons
-   - View progress percentage for files in "processing" state
 
 ## Environment Variables
 
@@ -618,6 +568,12 @@ MONGODB_URI=mongodb://mongodb:27017/textifying-speaking
 JWT_SECRET=your-super-secret-jwt-key-change-in-production
 PORT=3001
 MEDIA_STORAGE_PATH=./uploads
+TRANSCRIPTION_SERVICE_URL=http://transcription:5000
+```
+
+### Transcription Service (`ts-transcription/.env`)
+```env
+PORT=5000
 ```
 
 ### Docker Compose
@@ -635,6 +591,8 @@ Environment variables are configured in `docker-compose.yml` for containerized d
 - ✅ Protected routes (authentication required for sensitive operations)
 - ✅ JWT-secured WebSocket connections (authentication required for real-time updates)
 - ✅ User-scoped WebSocket broadcasts (users only receive updates for their own files)
+- ✅ File ownership validation for transcription (users can only transcribe their own files)
+- ✅ File type validation for transcription (audio/video only)
 - ✅ CORS enabled for frontend communication
 - ✅ MongoDB connection security
 - ✅ Secure credential verification (constant-time comparison via bcrypt)
