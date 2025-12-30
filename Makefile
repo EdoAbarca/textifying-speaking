@@ -1,4 +1,4 @@
-.PHONY: help build up down start stop restart logs clean test test-backend test-frontend install install-backend install-frontend dev-backend dev-frontend shell-backend shell-frontend shell-transcription db-shell
+.PHONY: help build up down start stop restart logs clean test test-backend test-frontend install install-backend install-frontend dev-backend dev-frontend shell-backend shell-frontend shell-transcription shell-redis db-shell redis-cli
 
 # Default target
 help:
@@ -17,6 +17,7 @@ help:
 	@echo "  make logs-frontend  - View frontend logs"
 	@echo "  make logs-transcription - View transcription service logs"
 	@echo "  make logs-mongodb   - View MongoDB logs"
+	@echo "  make logs-redis     - View Redis logs"
 	@echo "  make clean          - Stop containers and remove volumes"
 	@echo ""
 	@echo "Development Commands:"
@@ -36,6 +37,8 @@ help:
 	@echo "  make shell-backend  - Access backend container shell"
 	@echo "  make shell-frontend - Access frontend container shell"
 	@echo "  make shell-transcription - Access transcription service shell"
+	@echo "  make shell-redis    - Access Redis container shell"
+	@echo "  make redis-cli      - Access Redis CLI"
 	@echo "  make db-shell       - Access MongoDB shell"
 	@echo ""
 	@echo "Health Check:"
@@ -54,6 +57,7 @@ up:
 	@echo "  Backend:        http://localhost:3001"
 	@echo "  Transcription:  http://localhost:5000"
 	@echo "  MongoDB:        mongodb://localhost:27017"
+	@echo "  Redis:          redis://localhost:6379"
 
 down:
 	@echo "Stopping all services..."
@@ -85,6 +89,9 @@ logs-transcription:
 
 logs-mongodb:
 	docker compose logs -f mongodb
+
+logs-redis:
+	docker compose logs -f redis
 
 clean:
 	@echo "Stopping containers and removing volumes..."
@@ -137,6 +144,12 @@ shell-frontend:
 shell-transcription:
 	docker exec -it ts-transcription sh
 
+shell-redis:
+	docker exec -it ts-redis sh
+
+redis-cli:
+	docker exec -it ts-redis redis-cli
+
 db-shell:
 	docker exec -it ts-mongodb mongosh textifying-speaking
 
@@ -151,6 +164,8 @@ health:
 	@curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/health && echo " ✓" || echo " ✗"
 	@echo -n "MongoDB (localhost:27017): "
 	@docker exec ts-mongodb mongosh --eval "db.adminCommand('ping')" > /dev/null 2>&1 && echo " ✓" || echo " ✗"
+	@echo -n "Redis (localhost:6379): "
+	@docker exec ts-redis redis-cli ping > /dev/null 2>&1 && echo " ✓" || echo " ✗"
 
 # Quick start (build and run)
 quickstart: build up
