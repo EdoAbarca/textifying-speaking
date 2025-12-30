@@ -83,11 +83,35 @@
   - Containerized transcription service with Docker
   - JWT-protected transcription endpoint
 
+- **Background Real-time Transcription Progress (US-07)**: Process transcriptions asynchronously with real-time feedback
+  - BullMQ job queue for background transcription processing
+  - Redis as message broker for distributed job queue
+  - Non-blocking transcription (returns immediately after job enqueue)
+  - Background worker processes jobs with configurable concurrency (2 jobs simultaneously)
+  - Automatic retry mechanism (up to 3 attempts with exponential backoff)
+  - Real-time progress updates every 5% (5%, 10%, 15%, ..., 90%, 95%, 100%)
+  - WebSocket broadcasts of progress to authenticated users
+  - Google Drive-style floating progress indicator in UI:
+    - Fixed bottom-right corner position
+    - Shows all files currently processing
+    - Real-time progress bars with percentage
+    - Auto-hides when no files processing
+  - Enhanced toast notifications with rich content:
+    - Transcription started (info with spinner icon)
+    - Transcription completed (success with checkmark)
+    - Transcription failed (error with details)
+  - User can navigate freely while transcription runs in background
+  - Failed jobs retained for debugging and monitoring
+  - Dashboard updates automatically without page refresh
+  - Scalable architecture for handling multiple concurrent transcriptions
+
 ## Tech Stack
 
 ### Backend
 - **Framework**: NestJS 10.x (TypeScript)
 - **Database**: MongoDB with Mongoose ODM
+- **Cache/Queue**: Redis 7.0 for BullMQ job queue
+- **Job Queue**: BullMQ with @nestjs/bullmq for background job processing
 - **Authentication**: bcrypt for password hashing, JWT for session management
 - **File Upload**: Multer for multipart form data handling
 - **Real-Time Communication**: Socket.IO with @nestjs/websockets & @nestjs/platform-socket.io
@@ -141,7 +165,9 @@ docker compose up --build -d
 # Access the application
 # Frontend: http://localhost:5173
 # Backend: http://localhost:3001
+# Transcription: http://localhost:5000
 # MongoDB: mongodb://localhost:27017
+# Redis: redis://localhost:6379
 ```
 
 ### Using Makefile
@@ -163,6 +189,8 @@ make down
 make logs
 make logs-backend
 make logs-frontend
+make logs-transcription
+make logs-redis
 
 # Run tests
 make test-backend
@@ -170,6 +198,9 @@ make test-backend
 # Access container shells
 make shell-backend
 make shell-frontend
+make shell-transcription
+make shell-redis
+make redis-cli
 make db-shell
 
 # Clean up (removes volumes)
