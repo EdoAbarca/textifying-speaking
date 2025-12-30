@@ -92,6 +92,7 @@ export class MediaController {
         status: file.status,
         progress: file.progress,
         errorMessage: file.errorMessage,
+        transcribedText: file.transcribedText,
       })),
     };
   }
@@ -174,6 +175,69 @@ export class MediaController {
         status: updatedFile.status,
         progress: updatedFile.progress,
         errorMessage: updatedFile.errorMessage,
+      },
+    };
+  }
+
+  @Post(':id/transcribe')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  async transcribeFile(@Param('id') id: string, @Request() req) {
+    const file = await this.mediaService.findById(id);
+
+    if (!file) {
+      throw new NotFoundException('File not found');
+    }
+
+    // Verify file ownership
+    if (file.userId.toString() !== req.user.sub) {
+      throw new ForbiddenException('You do not have permission to transcribe this file');
+    }
+
+    // Check if file is audio/video
+    const validMimeTypes = ['audio/mpeg', 'audio/wav', 'audio/mp4', 'video/mp4', 'audio/x-m4a'];
+    if (!validMimeTypes.includes(file.mimetype)) {
+      throw new BadRequestException('File must be an audio or video file');
+    }
+
+    // Emit initial processing status
+    this.mediaGateway.emitFileStatusUpdate(req.user.sub, {
+      id: file._id.toString(),
+      filename: file.filename,
+      originalFilename: file.originalFilename,
+      mimetype: file.mimetype,
+      size: file.size,
+      uploadDate: file.uploadDate,
+      status: 'processing',
+      progress: 0,
+    });
+
+    // Start transcription asynchronously
+    this.mediaService.transcribeFile(id)
+      .then((updatedFile) => {
+        // Emit completion status
+        this.mediaGateway.emitFileStatusUpdate(req.user.sub, {
+          id: updatedFile._id.toString(),
+          filename: updatedFile.filename,
+          originalFilename: updatedFile.originalFilename,
+          mimetype: updatedFile.mimetype,
+          size: updatedFile.size,
+          uploadDate: updatedFile.uploadDate,
+          status: updatedFile.status,
+          progress: updatedFile.progress,
+          transcribedText: updatedFile.transcribedText,
+        });
+      })
+      .catch((error) => {
+        console.error(`Transcription failed for file ${id}:`, error);
+        // Error status will be emitted by the service via updateFileStatus
+      });
+
+    return {
+      message: 'Transcription started',
+      file: {
+        id: file._id,
+        status: 'processing',
       },
     };
   }
