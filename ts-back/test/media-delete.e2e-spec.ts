@@ -111,7 +111,7 @@ describe('DELETE /media/:id (e2e)', () => {
         path: testFilePath,
         size: 1024,
         uploadDate: new Date(),
-        status: 'uploaded',
+        status: 'ready',
       });
       const savedFile = await file.save();
 
@@ -161,7 +161,7 @@ describe('DELETE /media/:id (e2e)', () => {
         path: testFilePath,
         size: 1024,
         uploadDate: new Date(),
-        status: 'uploaded',
+        status: 'ready',
       });
       const savedFile = await file.save();
 
@@ -184,7 +184,7 @@ describe('DELETE /media/:id (e2e)', () => {
         path: '/uploads/test-unauth-file.mp3',
         size: 1024,
         uploadDate: new Date(),
-        status: 'uploaded',
+        status: 'ready',
       });
       const savedFile = await file.save();
 
@@ -202,7 +202,7 @@ describe('DELETE /media/:id (e2e)', () => {
         path: '/uploads/test-invalid-token-file.mp3',
         size: 1024,
         uploadDate: new Date(),
-        status: 'uploaded',
+        status: 'ready',
       });
       const savedFile = await file.save();
 
@@ -222,7 +222,7 @@ describe('DELETE /media/:id (e2e)', () => {
         path: path.join(testUploadsDir, 'nonexistent-file.mp3'),
         size: 1024,
         uploadDate: new Date(),
-        status: 'uploaded',
+        status: 'ready',
       });
       const savedFile = await file.save();
 

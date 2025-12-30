@@ -88,7 +88,7 @@ describe('AuthController /auth/login (e2e)', () => {
         })
         .expect(401);
 
-      expect(response.body).toHaveProperty('message', 'Invalid credentials');
+      expect(response.body).toHaveProperty('message', 'User with such email does not exist');
     });
 
     it('should return 401 for incorrect password', async () => {
@@ -100,7 +100,7 @@ describe('AuthController /auth/login (e2e)', () => {
         })
         .expect(401);
 
-      expect(response.body).toHaveProperty('message', 'Invalid credentials');
+      expect(response.body).toHaveProperty('message', 'Password doesn\'t match');
     });
 
     it('should return 400 for missing email', async () => {

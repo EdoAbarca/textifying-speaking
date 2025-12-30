@@ -53,7 +53,8 @@ describe('Media Status E2E Tests', () => {
           username: `testuser_${timestamp}`,
           email: `test_${timestamp}@example.com`,
           password: 'password123',
-        });
+        })
+        .expect(201);
 
       expect(registerResponse.status).toBe(201);
 
@@ -62,7 +63,8 @@ describe('Media Status E2E Tests', () => {
         .send({
           email: `test_${timestamp}@example.com`,
           password: 'password123',
-        });
+        })
+        .expect(200);
 
       expect(loginResponse.status).toBe(200);
       authToken = loginResponse.body.accessToken;

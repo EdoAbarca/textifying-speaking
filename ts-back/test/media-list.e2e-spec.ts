@@ -112,7 +112,7 @@ describe('GET /media (e2e)', () => {
         path: '/uploads/file-123.mp3',
         size: 1024,
         uploadDate: new Date(),
-        status: 'uploaded',
+        status: 'ready',
       });
       await file1.save();
 
@@ -124,7 +124,7 @@ describe('GET /media (e2e)', () => {
         path: '/uploads/file-456.mp3',
         size: 2048,
         uploadDate: new Date(),
-        status: 'uploaded',
+        status: 'ready',
       });
       await file2.save();
 
@@ -155,7 +155,7 @@ describe('GET /media (e2e)', () => {
         path: '/uploads/file-user1.mp3',
         size: 1024,
         uploadDate: new Date(),
-        status: 'uploaded',
+        status: 'ready',
       });
       await file1.save();
 
@@ -168,7 +168,7 @@ describe('GET /media (e2e)', () => {
         path: '/uploads/file-user2.mp3',
         size: 2048,
         uploadDate: new Date(),
-        status: 'uploaded',
+        status: 'ready',
       });
       await file2.save();
 
