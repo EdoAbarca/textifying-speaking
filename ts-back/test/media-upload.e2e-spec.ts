@@ -80,7 +80,7 @@ describe('Media Upload (e2e)', () => {
           expect(res.body.file).toBeDefined();
           expect(res.body.file.originalFilename).toBe('test.mp3');
           expect(res.body.file.mimetype).toBe('audio/mpeg');
-          expect(res.body.file.status).toBe('uploaded');
+          expect(res.body.file.status).toBe('ready');
         });
     });
 

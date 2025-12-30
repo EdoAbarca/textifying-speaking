@@ -3,13 +3,25 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { MediaFile, MediaFileDocument } from './schemas/media-file.schema';
 import * as fs from 'fs/promises';
+import axios from 'axios';
+import FormData from 'form-data';
+import * as fsSync from 'fs';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class MediaService {
+  private readonly transcriptionServiceUrl: string;
+
   constructor(
     @InjectModel(MediaFile.name)
     private mediaFileModel: Model<MediaFileDocument>,
-  ) {}
+    private configService: ConfigService,
+  ) {
+    this.transcriptionServiceUrl = this.configService.get<string>(
+      'TRANSCRIPTION_SERVICE_URL',
+      'http://ts-transcription:5000',
+    );
+  }
 
   async createMediaFile(
     userId: string,
@@ -89,5 +101,72 @@ export class MediaService {
     return this.mediaFileModel
       .findByIdAndUpdate(id, { progress }, { new: true })
       .exec();
+  }
+
+  async transcribeFile(id: string): Promise<MediaFileDocument> {
+    const file = await this.findById(id);
+    
+    if (!file) {
+      throw new InternalServerErrorException('File not found');
+    }
+
+    // Check if file is in a valid state for transcription
+    if (file.status === 'processing') {
+      throw new InternalServerErrorException('File is already being processed');
+    }
+
+    if (file.status === 'completed') {
+      throw new InternalServerErrorException('File has already been transcribed');
+    }
+
+    // Update status to processing
+    await this.updateFileStatus(id, 'processing', 0);
+
+    try {
+      // Prepare form data with the audio file
+      const formData = new FormData();
+      const fileStream = fsSync.createReadStream(file.path);
+      formData.append('file', fileStream, file.originalFilename);
+
+      // Call transcription service
+      const response = await axios.post(
+        `${this.transcriptionServiceUrl}/transcribe`,
+        formData,
+        {
+          headers: formData.getHeaders(),
+          timeout: 300000, // 5 minutes timeout
+        },
+      );
+
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Transcription failed');
+      }
+
+      // Update file with transcribed text and completed status
+      const updatedFile = await this.mediaFileModel
+        .findByIdAndUpdate(
+          id,
+          {
+            status: 'completed',
+            progress: 100,
+            transcribedText: response.data.text,
+          },
+          { new: true },
+        )
+        .exec();
+
+      if (!updatedFile) {
+        throw new InternalServerErrorException('Failed to update file');
+      }
+
+      return updatedFile;
+    } catch (error) {
+      // Update status to error
+      const errorMessage = error.response?.data?.error || error.message || 'Transcription failed';
+      
+      await this.updateFileStatus(id, 'error', 0, errorMessage);
+
+      throw new InternalServerErrorException(`Transcription failed: ${errorMessage}`);
+    }
   }
 }

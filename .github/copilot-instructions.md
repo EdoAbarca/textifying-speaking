@@ -27,9 +27,11 @@ ts-back/          # NestJS backend (TypeScript)
       schemas/    # MongoDB schemas (User)
       users.service.ts
       users.module.ts
-    media/        # Media upload & status module
+    media/        # Media upload, status & transcription module
       schemas/    # MongoDB schemas (MediaFile)
         media-file.schema.ts
+      filters/    # Exception filters
+        multer-exception.filter.ts
       media.controller.ts
       media.service.ts
       media.service.spec.ts
@@ -44,24 +46,30 @@ ts-back/          # NestJS backend (TypeScript)
     media-list.e2e-spec.ts
     media-delete.e2e-spec.ts
     media-status.e2e-spec.ts
+    media-transcribe.e2e-spec.ts
   uploads/        # Uploaded files storage
 ts-front/         # React frontend (JSX, not TypeScript)
   src/
     components/   # Shared components
-      Navbar.jsx  # Navigation with auth-aware UI & upload button
+      Navbar.jsx  # Navigation with auth-aware UI, upload & dashboard buttons
     hooks/        # Custom React hooks
       useFileStatus.js # WebSocket hook for real-time status updates
     pages/        # Page components
       Register.jsx
       Login.jsx
-      Dashboard.jsx # File list with real-time status updates
+      Dashboard.jsx # File list with transcription buttons & real-time updates
       Upload.jsx  # File upload page
       HealthCheck.jsx
     store/        # Zustand state management
       authStore.js # Auth state (user, token, actions)
     App.jsx       # Routes with ToastContainer & Navbar
     assets/       # Static resources
-docker-compose.yml # Orchestrates backend, frontend, MongoDB
+ts-transcription/ # Python transcription service
+  app.py          # Flask app with Whisper model
+  requirements.txt # Python dependencies (flask, torch, transformers, accelerate)
+  Dockerfile      # Python 3.11-slim with FFmpeg
+  README.md       # Service documentation
+docker-compose.yml # Orchestrates backend, frontend, transcription, MongoDB
 Makefile          # Development commands
 ```
 
@@ -148,13 +156,13 @@ npm run test:cov            # With coverage
 
 ### Docker & Networking
 - Services communicate via `textifying-speaking-network`
-- Frontend depends on backend, backend depends on MongoDB (see `docker-compose.yml`)
+- Frontend depends on backend, backend depends on MongoDB and transcription service
 - MongoDB data persisted in `mongodb_data` volume
 - Vite dev server bound to `0.0.0.0` for container access
-- Both use `node:20-alpine` base image
+- Backend and frontend use `node:20-alpine` base image
+- Transcription service uses `python:3.11-slim` base image
 - MongoDB uses official `mongo:7.0` image
 - Environment variables configured in `docker-compose.yml`
-- Both use `node:20-alpine` base image
 
 ## Critical Patterns
 
@@ -183,9 +191,11 @@ Current pattern (see `app.controller.ts`):
 ```bash
 docker logs ts-backend      # Backend logs
 docker logs ts-frontend     # Frontend logs
+docker logs ts-transcription # Transcription service logs
 docker logs ts-mongodb      # MongoDB logs
 make shell-backend          # Access backend shell
 make shell-frontend         # Access frontend shell
+make shell-transcription    # Access transcription shell
 make db-shell              # Access MongoDB shell
 ```
 
@@ -382,4 +392,81 @@ curl -X POST http://localhost:3001/media/upload \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
     -d '{"status":"error","errorMessage":"Transcription failed"}'
+  ```
+
+### US-06: Create Transcription ✅
+- **Backend**:
+  - MediaFile schema extended with `transcribedText` field for storing transcription results
+  - POST `/media/:id/transcribe` endpoint with JWT authentication
+  - File ownership validation (403 if user doesn't own file)
+  - File type validation (audio/video only: mp3, wav, m4a, mp4)
+  - Status validation (rejects if already processing or completed)
+  - Async transcription processing (non-blocking, returns immediately)
+  - Communication with Python transcription service via axios
+  - Multipart form data with form-data for file upload to transcription service
+  - Status updates: ready → processing (0%) → completed (100%) or error
+  - Transcribed text stored in database on completion
+  - Real-time WebSocket updates during transcription process
+  - Error handling with descriptive messages
+  - 5-minute timeout for transcription requests
+  - Unit tests for transcribeFile method (success, errors, validation)
+  - E2E tests for transcription endpoint (auth, ownership, file type, status validation)
+  - ConfigService integration for TRANSCRIPTION_SERVICE_URL
+- **Transcription Service**:
+  - Python 3.11-based Flask application on port 5000
+  - OpenAI Whisper (small) model via HuggingFace Transformers
+  - PyTorch for model inference with GPU acceleration support
+  - FFmpeg for audio processing
+  - GET `/health` endpoint for service health checks
+  - POST `/transcribe` endpoint accepting multipart/form-data
+  - Automatic device selection (CUDA if available, CPU otherwise)
+  - 30-second audio chunking for long files
+  - Batch processing (batch_size=16)
+  - Temporary file handling with cleanup
+  - Error handling and logging
+  - Docker containerized with python:3.11-slim
+  - Requirements: flask, torch, transformers, accelerate
+- **Frontend**:
+  - "Transcribe" button for files in 'ready' status
+  - Button disabled during transcription (tracked via state)
+  - "View Text" button for completed files with transcribedText
+  - Transcription text modal with:
+    - File name display
+    - Formatted text display with whitespace preservation
+    - Copy to clipboard functionality
+    - Close button
+  - "View Transcribed Text" button in file details modal
+  - Real-time status updates via WebSocket during transcription
+  - Toast notifications for transcription start, completion, and errors
+  - Error handling with user-friendly messages
+  - Loading states and disabled buttons during processing
+  - Icons: mdi:text-to-speech (Transcribe), mdi:text-box-outline (View Text)
+- **Docker & Infrastructure**:
+  - Transcription service added to docker-compose.yml
+  - Service name: `transcription` (container: ts-transcription)
+  - Backend depends on transcription service
+  - Network: textifying-speaking-network
+  - Environment variable: TRANSCRIPTION_SERVICE_URL=http://transcription:5000
+  - Makefile updated with transcription commands:
+    - `make logs-transcription` - view transcription service logs
+    - `make shell-transcription` - access transcription container
+    - `make health` - includes transcription health check
+- **Testing**:
+  - Backend unit tests pass (transcribeFile method)
+  - Backend E2E tests pass (transcription endpoint)
+  - Manual testing via curl commands
+  - Frontend browser testing workflow
+  - Health check endpoint for service monitoring
+- **API Examples**:
+  ```bash
+  # Start transcription
+  curl -X POST http://localhost:3001/media/{fileId}/transcribe \
+    -H "Authorization: Bearer $TOKEN"
+  
+  # Check transcription service health
+  curl http://localhost:5000/health
+  
+  # Test transcription service directly
+  curl -X POST http://localhost:5000/transcribe \
+    -F "file=@/path/to/audio.mp3"
   ```

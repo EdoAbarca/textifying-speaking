@@ -12,7 +12,9 @@ export default function Dashboard() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showTranscriptionModal, setShowTranscriptionModal] = useState(false);
   const [fileToDelete, setFileToDelete] = useState(null);
+  const [transcribingFiles, setTranscribingFiles] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
   const { token } = useAuthStore();
   const navigate = useNavigate();
@@ -43,9 +45,21 @@ export default function Dashboard() {
 
     // Show toast notification for status changes
     if (updatedFile.status === 'completed') {
-      toast.success(`File "${updatedFile.originalFilename}" is ready!`);
+      toast.success(`File "${updatedFile.originalFilename}" processing complete!`);
+      // Remove from transcribing set
+      setTranscribingFiles(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(updatedFile.id);
+        return newSet;
+      });
     } else if (updatedFile.status === 'error') {
       toast.error(`Error processing "${updatedFile.originalFilename}": ${updatedFile.errorMessage || 'Unknown error'}`);
+      // Remove from transcribing set
+      setTranscribingFiles(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(updatedFile.id);
+        return newSet;
+      });
     }
   }, []);
 
@@ -103,6 +117,39 @@ export default function Dashboard() {
   const handleDeleteClick = (file) => {
     setFileToDelete(file);
     setShowDeleteModal(true);
+  };
+
+  const handleTranscribeClick = async (file) => {
+    try {
+      setTranscribingFiles(prev => new Set(prev).add(file.id));
+      
+      const response = await fetch(`http://localhost:3001/media/${file.id}/transcribe`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to start transcription');
+      }
+
+      toast.info(`Transcription started for "${file.originalFilename}"`);
+    } catch (error) {
+      console.error('Error starting transcription:', error);
+      toast.error(error.message || 'Failed to start transcription. Please try again.');
+      setTranscribingFiles(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(file.id);
+        return newSet;
+      });
+    }
+  };
+
+  const handleViewTranscription = (file) => {
+    setSelectedFile(file);
+    setShowTranscriptionModal(true);
   };
 
   const handleDeleteConfirm = async () => {
@@ -263,6 +310,25 @@ export default function Dashboard() {
                       <Icon icon="mdi:information-outline" width={18} />
                       Details
                     </button>
+                    {file.status === 'ready' && (
+                      <button
+                        onClick={() => handleTranscribeClick(file)}
+                        disabled={transcribingFiles.has(file.id)}
+                        className="flex-1 px-3 py-2 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        <Icon icon="mdi:text-to-speech" width={18} />
+                        Transcribe
+                      </button>
+                    )}
+                    {file.status === 'completed' && file.transcribedText && (
+                      <button
+                        onClick={() => handleViewTranscription(file)}
+                        className="flex-1 px-3 py-2 bg-indigo-500 text-white text-sm rounded-lg hover:bg-indigo-600 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Icon icon="mdi:text-box-outline" width={18} />
+                        View Text
+                      </button>
+                    )}
                     <button
                       onClick={() => handleDeleteClick(file)}
                       className="px-3 py-2 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center"
@@ -365,9 +431,38 @@ export default function Dashboard() {
                     <p className="text-red-600 text-sm">{selectedFile.errorMessage}</p>
                   </div>
                 )}
+
+                {selectedFile.transcribedText && (
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Transcription Available</p>
+                    <button
+                      onClick={() => {
+                        setShowDetailsModal(false);
+                        handleViewTranscription(selectedFile);
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-indigo-500 text-white text-sm rounded-lg hover:bg-indigo-600 transition-colors"
+                    >
+                      <Icon icon="mdi:text-box-outline" width={18} />
+                      View Transcribed Text
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="mt-6 pt-6 border-t border-gray-200 flex gap-3">
+                {selectedFile.status === 'ready' && (
+                  <button
+                    onClick={() => {
+                      setShowDetailsModal(false);
+                      handleTranscribeClick(selectedFile);
+                    }}
+                    disabled={transcribingFiles.has(selectedFile.id)}
+                    className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <Icon icon="mdi:text-to-speech" width={20} />
+                    Transcribe File
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     setShowDetailsModal(false);
@@ -440,6 +535,69 @@ export default function Dashboard() {
                   className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
                   Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transcription Text Modal */}
+      {showTranscriptionModal && selectedFile && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">Transcribed Text</h2>
+                <p className="text-sm text-gray-500 mt-1">{selectedFile.originalFilename}</p>
+              </div>
+              <button
+                onClick={() => setShowTranscriptionModal(false)}
+                className="text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                <Icon icon="mdi:close" width={24} />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Icon icon="mdi:text-box-check-outline" width={24} className="text-green-500" />
+                    <span className="text-sm font-medium text-gray-700">Transcription Result</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(selectedFile.transcribedText || '');
+                      toast.success('Transcription copied to clipboard!');
+                    }}
+                    className="flex items-center gap-2 px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors"
+                  >
+                    <Icon icon="mdi:content-copy" width={16} />
+                    Copy
+                  </button>
+                </div>
+                
+                {selectedFile.transcribedText ? (
+                  <div className="bg-white rounded-lg p-4 border border-gray-200">
+                    <p className="text-gray-800 whitespace-pre-wrap leading-relaxed">
+                      {selectedFile.transcribedText}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Icon icon="mdi:text-box-remove-outline" width={48} className="text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-500">No transcription text available</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-6 pt-6 border-t border-gray-200 flex justify-end">
+                <button
+                  onClick={() => setShowTranscriptionModal(false)}
+                  className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Close
                 </button>
               </div>
             </div>
