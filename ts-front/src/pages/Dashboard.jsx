@@ -5,6 +5,7 @@ import { toast } from 'react-toastify';
 import axios from 'axios';
 import useAuthStore from '../store/authStore';
 import { useFileStatus } from '../hooks/useFileStatus';
+import FloatingProgressIndicator from '../components/FloatingProgressIndicator';
 
 export default function Dashboard() {
   const [files, setFiles] = useState([]);
@@ -27,7 +28,62 @@ export default function Dashboard() {
       if (existingFileIndex >= 0) {
         // Update existing file
         const newFiles = [...prevFiles];
+        const oldStatus = newFiles[existingFileIndex].status;
         newFiles[existingFileIndex] = { ...newFiles[existingFileIndex], ...updatedFile };
+        
+        // Show notifications for status changes
+        if (oldStatus !== updatedFile.status) {
+          if (updatedFile.status === 'processing') {
+            toast.info(
+              <div className="flex items-center gap-2">
+                <Icon icon="mdi:cog" className="animate-spin" width={20} />
+                <div>
+                  <div className="font-semibold">Transcription started</div>
+                  <div className="text-sm opacity-90">{updatedFile.originalFilename}</div>
+                </div>
+              </div>,
+              { autoClose: 3000 }
+            );
+          } else if (updatedFile.status === 'completed') {
+            toast.success(
+              <div className="flex items-center gap-2">
+                <Icon icon="mdi:check-circle" width={20} />
+                <div>
+                  <div className="font-semibold">Transcription completed!</div>
+                  <div className="text-sm opacity-90">{updatedFile.originalFilename}</div>
+                </div>
+              </div>,
+              { autoClose: 5000 }
+            );
+            // Remove from transcribing set
+            setTranscribingFiles(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(updatedFile.id);
+              return newSet;
+            });
+          } else if (updatedFile.status === 'error') {
+            toast.error(
+              <div className="flex items-center gap-2">
+                <Icon icon="mdi:alert-circle" width={20} />
+                <div>
+                  <div className="font-semibold">Transcription failed</div>
+                  <div className="text-sm opacity-90">{updatedFile.originalFilename}</div>
+                  {updatedFile.errorMessage && (
+                    <div className="text-xs mt-1 opacity-75">{updatedFile.errorMessage}</div>
+                  )}
+                </div>
+              </div>,
+              { autoClose: 7000 }
+            );
+            // Remove from transcribing set
+            setTranscribingFiles(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(updatedFile.id);
+              return newSet;
+            });
+          }
+        }
+        
         return newFiles;
       } else {
         // Add new file
@@ -42,25 +98,6 @@ export default function Dashboard() {
       }
       return prevSelectedFile;
     });
-
-    // Show toast notification for status changes
-    if (updatedFile.status === 'completed') {
-      toast.success(`File "${updatedFile.originalFilename}" processing complete!`);
-      // Remove from transcribing set
-      setTranscribingFiles(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(updatedFile.id);
-        return newSet;
-      });
-    } else if (updatedFile.status === 'error') {
-      toast.error(`Error processing "${updatedFile.originalFilename}": ${updatedFile.errorMessage || 'Unknown error'}`);
-      // Remove from transcribing set
-      setTranscribingFiles(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(updatedFile.id);
-        return newSet;
-      });
-    }
   }, []);
 
   const handleFileProgress = useCallback((progressData) => {
@@ -604,6 +641,9 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Floating Progress Indicator (Google Drive style) */}
+      <FloatingProgressIndicator files={files} />
     </div>
   );
 }
