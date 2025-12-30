@@ -20,11 +20,14 @@ services:
       - MONGODB_URI=mongodb://mongodb:27017/textifying-speaking
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - TRANSCRIPTION_SERVICE_URL=http://transcription:5000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     networks:
       - textifying-speaking-network
     depends_on:
       - mongodb
       - transcription
+      - redis
 
   transcription:
     build:
@@ -57,8 +60,20 @@ services:
     networks:
       - textifying-speaking-network
 
+  redis:
+    image: redis:7-alpine
+    container_name: ts-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - textifying-speaking-network
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+
 networks:
   textifying-speaking-network:
 
 volumes:
   mongodb_data:
+  redis_data:

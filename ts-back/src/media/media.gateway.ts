@@ -72,8 +72,25 @@ export class MediaGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  emitFileStatusUpdate(userId: string, fileData: any) {
-    this.emitToUser(userId, 'fileStatusUpdate', fileData);
+  emitFileStatusUpdate(userId: string, fileData: any): void;
+  emitFileStatusUpdate(userId: string, fileId: string, status: string, progress?: number, errorMessage?: string): void;
+  emitFileStatusUpdate(userId: string, fileDataOrId: any, status?: string, progress?: number, errorMessage?: string) {
+    let eventData: any;
+    
+    if (typeof fileDataOrId === 'string') {
+      // Called with individual parameters
+      eventData = { 
+        fileId: fileDataOrId, 
+        status, 
+        progress: progress !== undefined ? progress : null,
+        errorMessage: errorMessage || null,
+      };
+    } else {
+      // Called with file data object
+      eventData = fileDataOrId;
+    }
+    
+    this.emitToUser(userId, 'fileStatusUpdate', eventData);
   }
 
   emitFileProgress(userId: string, fileId: string, progress: number) {

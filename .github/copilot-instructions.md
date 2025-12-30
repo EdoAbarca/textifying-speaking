@@ -5,6 +5,7 @@ Textifying Speaking is a web application for audio/video transcription and summa
 - **Backend**: NestJS 10.x (TypeScript) on port 3001
 - **Frontend**: React 19 + Vite 7 (JavaScript/JSX) with TailwindCSS 4 on port 5173
 - **Database**: MongoDB 7.0 on port 27017 with Mongoose ODM
+- **Cache/Queue**: Redis 7.0 on port 6379 for BullMQ job queue
 - **Architecture**: Microservices with Docker Compose orchestration
 
 ## Project Structure
@@ -37,7 +38,9 @@ ts-back/          # NestJS backend (TypeScript)
       media.service.spec.ts
       media.gateway.ts # WebSocket gateway for real-time updates
       media.module.ts
-    app.module.ts # Main module with MongoDB & Config
+      transcription.processor.ts # BullMQ processor for async transcription
+      transcription.processor.spec.ts # Unit tests for processor
+    app.module.ts # Main module with MongoDB, BullMQ & Config
     main.ts       # Entry point with ValidationPipe
   test/           # E2E tests
     auth-register.e2e-spec.ts
@@ -52,6 +55,7 @@ ts-front/         # React frontend (JSX, not TypeScript)
   src/
     components/   # Shared components
       Navbar.jsx  # Navigation with auth-aware UI, upload & dashboard buttons
+      FloatingProgressIndicator.jsx # Google Drive-style progress indicator
     hooks/        # Custom React hooks
       useFileStatus.js # WebSocket hook for real-time status updates
     pages/        # Page components
@@ -470,3 +474,81 @@ curl -X POST http://localhost:3001/media/upload \
   curl -X POST http://localhost:5000/transcribe \
     -F "file=@/path/to/audio.mp3"
   ```
+### US-07: Background Real-time Transcription Progress ✅
+- **Backend**:
+  - BullMQ job queue integration for asynchronous transcription processing
+  - Redis 7-alpine as message broker for job queue (port 6379)
+  - TranscriptionProcessor worker for background job processing
+    - Concurrency: 2 jobs simultaneously
+    - Job retry strategy: up to 3 attempts with exponential backoff (5s delay)
+    - Automatic job cleanup on completion
+    - Failed jobs retained for debugging
+  - POST `/media/:id/transcribe` enqueues jobs instead of blocking
+    - Returns immediately with 200 status after job creation
+    - Job data includes: fileId, userId, filePath, originalFilename
+  - TranscriptionProcessor handles async transcription:
+    - Progress updates every 5% (5%, 10%, 15%, ..., 90%, 95%, 100%)
+    - Real-time WebSocket broadcasts to user at each progress step
+    - Updates database with status and progress
+    - Stores transcribed text on completion
+    - Error handling with status update to 'error' and error message
+  - MediaGateway enhanced with overloaded `emitFileStatusUpdate` methods
+    - Supports both object-based and parameter-based invocations
+    - Type-safe status updates with optional progress and error message
+  - Unit tests for TranscriptionProcessor (success, errors, progress updates)
+  - E2E tests adapted for async behavior (wait for completion with timeouts)
+  - ConfigService for REDIS_HOST and REDIS_PORT environment variables
+- **Frontend**:
+  - FloatingProgressIndicator component (Google Drive-style):
+    - Fixed bottom-right corner position
+    - Shows all files currently processing
+    - Real-time progress bars with percentage
+    - File type icons and truncated filenames
+    - Gradient header with animated spinner
+    - Auto-hides when no files processing
+    - Maximum height with scroll for multiple files
+  - Enhanced toast notifications with rich content:
+    - "Transcription started" (info) with spinner icon
+    - "Transcription completed" (success) with checkmark icon
+    - "Transcription failed" (error) with alert icon and error message
+    - Icons and formatted messages in toast content
+    - Different auto-close times (3s, 5s, 7s) based on importance
+  - Real-time Dashboard updates via WebSocket
+    - Status badges with animated icons (spinner, cog, checkmark, alert)
+    - Progress percentage display next to status badge
+    - Smooth UI transitions without page refresh
+  - User can navigate freely while transcription runs in background
+- **Docker & Infrastructure**:
+  - Redis service added to docker-compose.yml
+    - Image: redis:7-alpine
+    - Container: ts-redis
+    - Port: 6379
+    - Persistent storage with redis_data volume
+    - AOF (append-only file) persistence enabled
+    - Connected to textifying-speaking-network
+  - Backend depends on Redis service
+  - Environment variables: REDIS_HOST=redis, REDIS_PORT=6379
+  - Makefile commands added:
+    - `make logs-redis` - view Redis logs
+    - `make shell-redis` - access Redis container shell
+    - `make redis-cli` - access Redis CLI directly
+    - `make health` - includes Redis health check (PING command)
+- **Dependencies**:
+  - Backend: @nestjs/bull@^10.2.1, @nestjs/bullmq@^10.2.1, bullmq@^5.34.0
+  - Redis: Official redis:7-alpine Docker image
+- **Architecture Benefits**:
+  - Non-blocking API responses (immediate return after job enqueue)
+  - Scalable job processing (configurable concurrency)
+  - Resilient error handling (automatic retries with backoff)
+  - Real-time progress feedback via WebSocket
+  - User can continue using app while jobs process
+  - Failed jobs retained for debugging and monitoring
+- **Testing**:
+  - Unit tests for TranscriptionProcessor (success, network errors, service errors)
+  - E2E tests verify async behavior (job enqueue returns immediately)
+  - Manual testing workflow: upload → transcribe → observe real-time updates → completion
+- **API Behavior Changes**:
+  - POST `/media/:id/transcribe` now returns immediately (non-blocking)
+  - Response format unchanged: `{ message: 'Transcription started', file: { id, status } }`
+  - Actual transcription happens asynchronously via job queue
+  - Status updates pushed to frontend via WebSocket events

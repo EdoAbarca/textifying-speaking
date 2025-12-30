@@ -18,10 +18,13 @@ import {
   UseFilters,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { MediaService } from './media.service';
 import { MediaGateway } from './media.gateway';
 import { MulterExceptionFilter } from './filters/multer-exception.filter';
+import { TranscriptionJobData } from './transcription.processor';
 
 @Controller('media')
 @UseFilters(MulterExceptionFilter)
@@ -29,6 +32,7 @@ export class MediaController {
   constructor(
     private readonly mediaService: MediaService,
     private readonly mediaGateway: MediaGateway,
+    @InjectQueue('transcription') private transcriptionQueue: Queue<TranscriptionJobData>,
   ) {}
 
   @Post('upload')
@@ -200,38 +204,34 @@ export class MediaController {
       throw new BadRequestException('File must be an audio or video file');
     }
 
-    // Emit initial processing status
-    this.mediaGateway.emitFileStatusUpdate(req.user.sub, {
-      id: file._id.toString(),
-      filename: file.filename,
-      originalFilename: file.originalFilename,
-      mimetype: file.mimetype,
-      size: file.size,
-      uploadDate: file.uploadDate,
-      status: 'processing',
-      progress: 0,
-    });
+    // Check if file is in a valid state for transcription
+    if (file.status === 'processing') {
+      throw new BadRequestException('File is already being processed');
+    }
 
-    // Start transcription asynchronously
-    this.mediaService.transcribeFile(id)
-      .then((updatedFile) => {
-        // Emit completion status
-        this.mediaGateway.emitFileStatusUpdate(req.user.sub, {
-          id: updatedFile._id.toString(),
-          filename: updatedFile.filename,
-          originalFilename: updatedFile.originalFilename,
-          mimetype: updatedFile.mimetype,
-          size: updatedFile.size,
-          uploadDate: updatedFile.uploadDate,
-          status: updatedFile.status,
-          progress: updatedFile.progress,
-          transcribedText: updatedFile.transcribedText,
-        });
-      })
-      .catch((error) => {
-        console.error(`Transcription failed for file ${id}:`, error);
-        // Error status will be emitted by the service via updateFileStatus
-      });
+    if (file.status === 'completed') {
+      throw new BadRequestException('File has already been transcribed');
+    }
+
+    // Add transcription job to queue
+    await this.transcriptionQueue.add(
+      'transcribe',
+      {
+        fileId: file._id.toString(),
+        userId: req.user.sub,
+        filePath: file.path,
+        originalFilename: file.originalFilename,
+      },
+      {
+        removeOnComplete: true, // Remove job from queue after completion
+        removeOnFail: false, // Keep failed jobs for debugging
+        attempts: 3, // Retry up to 3 times on failure
+        backoff: {
+          type: 'exponential',
+          delay: 5000, // Start with 5 seconds delay
+        },
+      },
+    );
 
     return {
       message: 'Transcription started',

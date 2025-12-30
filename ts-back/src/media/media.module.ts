@@ -3,12 +3,14 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { MulterModule } from '@nestjs/platform-express';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { BullModule } from '@nestjs/bullmq';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { MediaController } from './media.controller';
 import { MediaService } from './media.service';
 import { MediaGateway } from './media.gateway';
 import { MediaFile, MediaFileSchema } from './schemas/media-file.schema';
+import { TranscriptionProcessor } from './transcription.processor';
 
 const ALLOWED_MIMETYPES = [
   'audio/mpeg', // .mp3
@@ -26,6 +28,9 @@ const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
     MongooseModule.forFeature([
       { name: MediaFile.name, schema: MediaFileSchema },
     ]),
+    BullModule.registerQueue({
+      name: 'transcription',
+    }),
     MulterModule.register({
       storage: diskStorage({
         destination: process.env.MEDIA_STORAGE_PATH || './uploads',
@@ -60,7 +65,7 @@ const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
     }),
   ],
   controllers: [MediaController],
-  providers: [MediaService, MediaGateway],
+  providers: [MediaService, MediaGateway, TranscriptionProcessor],
   exports: [MediaService],
 })
 export class MediaModule {}
