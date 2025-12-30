@@ -167,7 +167,7 @@ describe('AuthService', () => {
       usersService.findByEmail.mockResolvedValue(null);
 
       await expect(service.login(loginDto)).rejects.toThrow(
-        new UnauthorizedException('Invalid credentials'),
+        new UnauthorizedException('User with such email does not exist'),
       );
       expect(usersService.findByEmail).toHaveBeenCalledWith(loginDto.email);
       expect(bcrypt.compare).not.toHaveBeenCalled();
@@ -178,7 +178,7 @@ describe('AuthService', () => {
       (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
       await expect(service.login(loginDto)).rejects.toThrow(
-        new UnauthorizedException('Invalid credentials'),
+        new UnauthorizedException('Password doesn\'t match'),
       );
       expect(usersService.findByEmail).toHaveBeenCalledWith(loginDto.email);
       expect(bcrypt.compare).toHaveBeenCalledWith(

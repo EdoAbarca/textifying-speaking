@@ -1,7 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
+import { ConfigService } from '@nestjs/config';
 import { MediaService } from './media.service';
 import { MediaFile, MediaFileDocument } from './schemas/media-file.schema';
+import axios from 'axios';
 
 describe('MediaService', () => {
   let service: MediaService;
@@ -35,6 +37,12 @@ describe('MediaService', () => {
     exec: jest.fn(),
   });
 
+  const mockConfigService = {
+    get: jest.fn().mockReturnValue('http://ts-transcription:5000'),
+  };
+
+  jest.mock('axios');
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -44,6 +52,10 @@ describe('MediaService', () => {
         {
           provide: getModelToken(MediaFile.name),
           useValue: mockMediaFileModel,
+        },
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
         },
       ],
     }).compile();
@@ -243,6 +255,124 @@ describe('MediaService', () => {
         { new: true },
       );
       expect(result).toEqual(updatedFile);
+    });
+  });
+
+  describe('transcribeFile', () => {
+    it('should transcribe file successfully', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+      const transcribedText = 'This is the transcribed text';
+      
+      mockMediaFileModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(mockMediaFile),
+      });
+
+      mockMediaFileModel.findByIdAndUpdate = jest.fn()
+        .mockReturnValueOnce({
+          exec: jest.fn().mockResolvedValue({ ...mockMediaFile, status: 'processing', progress: 0 }),
+        })
+        .mockReturnValueOnce({
+          exec: jest.fn().mockResolvedValue({ 
+            ...mockMediaFile, 
+            status: 'completed', 
+            progress: 100,
+            transcribedText 
+          }),
+        });
+
+      // Mock axios
+      jest.spyOn(axios, 'post').mockResolvedValue({
+        data: {
+          success: true,
+          text: transcribedText,
+        },
+      } as any);
+
+      // Mock fs with proper stream that implements EventEmitter
+      const fs = require('fs');
+      const { Readable } = require('stream');
+      const mockStream = new Readable();
+      mockStream._read = () => {};
+      mockStream.push('mock data');
+      mockStream.push(null);
+      
+      jest.spyOn(fs, 'createReadStream').mockReturnValue(mockStream);
+
+      const result = await service.transcribeFile(fileId);
+
+      expect(mockMediaFileModel.findById).toHaveBeenCalledWith(fileId);
+      expect(axios.post).toHaveBeenCalled();
+      expect(result.transcribedText).toBe(transcribedText);
+      expect(result.status).toBe('completed');
+    });
+
+    it('should throw error if file not found', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+      
+      mockMediaFileModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(null),
+      });
+
+      await expect(service.transcribeFile(fileId)).rejects.toThrow('File not found');
+    });
+
+    it('should throw error if file is already processing', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+      const processingFile = { ...mockMediaFile, status: 'processing' };
+      
+      mockMediaFileModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(processingFile),
+      });
+
+      await expect(service.transcribeFile(fileId)).rejects.toThrow('File is already being processed');
+    });
+
+    it('should throw error if file is already completed', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+      const completedFile = { ...mockMediaFile, status: 'completed' };
+      
+      mockMediaFileModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(completedFile),
+      });
+
+      await expect(service.transcribeFile(fileId)).rejects.toThrow('File has already been transcribed');
+    });
+
+    it('should handle transcription service error', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+      
+      mockMediaFileModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(mockMediaFile),
+      });
+
+      mockMediaFileModel.findByIdAndUpdate = jest.fn()
+        .mockReturnValue({
+          exec: jest.fn().mockResolvedValue({ ...mockMediaFile, status: 'processing', progress: 0 }),
+        });
+
+      // Mock axios to throw error
+      jest.spyOn(axios, 'post').mockRejectedValue(new Error('Service unavailable'));
+
+      // Mock fs with proper stream
+      const fs = require('fs');
+      const { Readable } = require('stream');
+      const mockStream = new Readable();
+      mockStream._read = () => {};
+      mockStream.push('mock data');
+      mockStream.push(null);
+      
+      jest.spyOn(fs, 'createReadStream').mockReturnValue(mockStream);
+
+      await expect(service.transcribeFile(fileId)).rejects.toThrow('Transcription failed');
+      
+      // Verify error status was updated
+      expect(mockMediaFileModel.findByIdAndUpdate).toHaveBeenCalledWith(
+        fileId,
+        expect.objectContaining({
+          status: 'processing',
+        }),
+        expect.any(Object),
+      );
     });
   });
 });
