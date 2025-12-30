@@ -1,4 +1,4 @@
-.PHONY: help build up down start stop restart logs clean test test-backend test-frontend install install-backend install-frontend dev-backend dev-frontend shell-backend shell-frontend db-shell
+.PHONY: help build up down start stop restart logs clean test test-backend test-frontend install install-backend install-frontend dev-backend dev-frontend shell-backend shell-frontend shell-transcription db-shell
 
 # Default target
 help:
@@ -15,6 +15,7 @@ help:
 	@echo "  make logs           - View logs from all services"
 	@echo "  make logs-backend   - View backend logs"
 	@echo "  make logs-frontend  - View frontend logs"
+	@echo "  make logs-transcription - View transcription service logs"
 	@echo "  make logs-mongodb   - View MongoDB logs"
 	@echo "  make clean          - Stop containers and remove volumes"
 	@echo ""
@@ -34,6 +35,7 @@ help:
 	@echo "Shell Access:"
 	@echo "  make shell-backend  - Access backend container shell"
 	@echo "  make shell-frontend - Access frontend container shell"
+	@echo "  make shell-transcription - Access transcription service shell"
 	@echo "  make db-shell       - Access MongoDB shell"
 	@echo ""
 	@echo "Health Check:"
@@ -48,9 +50,10 @@ up:
 	@echo "Starting all services..."
 	docker compose up -d
 	@echo "Services started! Access:"
-	@echo "  Frontend: http://localhost:5173"
-	@echo "  Backend:  http://localhost:3001"
-	@echo "  MongoDB:  mongodb://localhost:27017"
+	@echo "  Frontend:       http://localhost:5173"
+	@echo "  Backend:        http://localhost:3001"
+	@echo "  Transcription:  http://localhost:5000"
+	@echo "  MongoDB:        mongodb://localhost:27017"
 
 down:
 	@echo "Stopping all services..."
@@ -76,6 +79,9 @@ logs-backend:
 
 logs-frontend:
 	docker compose logs -f frontend
+
+logs-transcription:
+	docker compose logs -f transcription
 
 logs-mongodb:
 	docker compose logs -f mongodb
@@ -128,6 +134,9 @@ shell-backend:
 shell-frontend:
 	docker exec -it ts-frontend sh
 
+shell-transcription:
+	docker exec -it ts-transcription sh
+
 db-shell:
 	docker exec -it ts-mongodb mongosh textifying-speaking
 
@@ -138,6 +147,8 @@ health:
 	@curl -s -o /dev/null -w "%{http_code}" http://localhost:5173 && echo " ✓" || echo " ✗"
 	@echo -n "Backend (http://localhost:3001): "
 	@curl -s -o /dev/null -w "%{http_code}" http://localhost:3001 && echo " ✓" || echo " ✗"
+	@echo -n "Transcription (http://localhost:5000/health): "
+	@curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/health && echo " ✓" || echo " ✗"
 	@echo -n "MongoDB (localhost:27017): "
 	@docker exec ts-mongodb mongosh --eval "db.adminCommand('ping')" > /dev/null 2>&1 && echo " ✓" || echo " ✗"
 
