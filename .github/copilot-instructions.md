@@ -552,3 +552,110 @@ curl -X POST http://localhost:3001/media/upload \
   - Response format unchanged: `{ message: 'Transcription started', file: { id, status } }`
   - Actual transcription happens asynchronously via job queue
   - Status updates pushed to frontend via WebSocket events
+
+### US-08: See Transcription ✅
+- **Backend**:
+  - GET `/media/:id/transcription` endpoint for secure transcription access
+  - MediaService.getTranscription method with status-aware responses:
+    - Returns transcription text for completed files with metadata
+    - Returns progress info for processing files
+    - Returns error message for failed transcriptions
+    - Returns status message for ready/uploading files
+  - JWT authentication required (JwtAuthGuard)
+  - File ownership validation (403 if user doesn't own file)
+  - Type-safe return type with optional fields based on status
+  - Handles edge cases:
+    - File not found (throws InternalServerErrorException)
+    - Completed file without transcription text (throws exception for data inconsistency)
+  - Unit tests for MediaService.getTranscription:
+    - Successful retrieval for completed file
+    - Processing status with progress
+    - Error status with message
+    - Ready/uploading status
+    - File not found error
+    - Completed file without text error (7 test cases total)
+  - E2E tests for GET `/media/:id/transcription`:
+    - Ready file response
+    - Unauthorized access (401)
+    - Forbidden access to other user's file (403)
+    - Non-existent file (404)
+    - Processing file with progress
+    - Error file with message
+    - Completed file with transcription
+    - Completed file without transcription (500) (8 test cases total)
+  - MongoDB direct updates in E2E tests using ObjectId for accurate testing
+  - Test isolation with unique timestamps to avoid user conflicts
+- **Frontend**:
+  - Dashboard already has complete transcription viewing functionality (from US-06)
+  - Transcription modal with:
+    - Scrollable container for long text
+    - Whitespace-preserved formatting (whitespace-pre-wrap)
+    - Copy-to-clipboard button with success toast
+    - File metadata display (filename)
+    - Clean and readable text presentation
+  - "View Text" button for completed files with transcribedText
+  - "View Transcribed Text" button in file details modal
+  - Real-time updates via WebSocket (transcription appears when completed)
+  - Frontend uses GET `/media` endpoint which includes transcribedText
+  - New GET `/media/:id/transcription` endpoint available for dedicated transcription retrieval (not currently used by frontend, but ready for future optimization)
+- **API Endpoint**:
+  - Path: GET `/media/:id/transcription`
+  - Authentication: Required (Bearer JWT token)
+  - Response structure varies by file status:
+    ```typescript
+    // Completed file
+    { 
+      status: 'completed',
+      transcription: string,
+      fileId: string,
+      originalFilename: string
+    }
+    
+    // Processing file
+    { 
+      status: 'processing',
+      progress: number,
+      message: 'Transcription is in progress'
+    }
+    
+    // Error file
+    { 
+      status: 'error',
+      message: string
+    }
+    
+    // Ready/uploading file
+    { 
+      status: 'ready' | 'uploading',
+      message: 'Transcription has not been started yet'
+    }
+    ```
+  - Error codes:
+    - 401: Unauthorized (missing/invalid token)
+    - 403: Forbidden (file owned by another user)
+    - 404: Not Found (file doesn't exist)
+    - 500: Internal Server Error (completed file without transcription)
+- **Testing**:
+  - Unit tests: 24 passed (MediaService includes getTranscription tests)
+  - E2E tests: 8 passed for transcription endpoint
+  - End-to-end test script: test-us-08.sh
+    - Tests all file statuses (ready, processing, error, completed)
+    - Tests authentication and authorization
+    - Tests ownership validation
+    - Uses MongoDB direct updates for completed file simulation
+  - All tests pass with JWT_SECRET environment variable set
+- **Documentation**:
+  - README.md updated with:
+    - Feature description in "View Transcription (US-08)" section
+    - API endpoint documentation with examples
+    - Response formats for all file statuses
+    - Error codes and behaviors
+    - Use cases and best practices
+  - .github/copilot-instructions.md updated with full implementation details
+- **Integration**:
+  - Works seamlessly with existing Dashboard UI
+  - No frontend changes required (already has transcription viewing from US-06)
+  - Backend provides dedicated, secure endpoint for transcription retrieval
+  - Supports future optimizations (e.g., lazy loading transcription text)
+  - Maintains data privacy through ownership validation
+  - Real-time updates via WebSocket ensure UI stays synchronized
