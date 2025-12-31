@@ -169,4 +169,54 @@ export class MediaService {
       throw new InternalServerErrorException(`Transcription failed: ${errorMessage}`);
     }
   }
+
+  async getTranscription(id: string): Promise<{
+    status: string;
+    transcription?: string;
+    progress?: number;
+    message?: string;
+    fileId?: string;
+    originalFilename?: string;
+  }> {
+    const file = await this.findById(id);
+    
+    if (!file) {
+      throw new InternalServerErrorException('File not found');
+    }
+
+    // Handle different file states
+    if (file.status === 'processing') {
+      return {
+        status: 'processing',
+        progress: file.progress || 0,
+        message: 'Transcription is in progress',
+      };
+    }
+
+    if (file.status === 'error') {
+      return {
+        status: 'error',
+        message: file.errorMessage || 'Transcription failed',
+      };
+    }
+
+    if (file.status === 'ready' || file.status === 'uploading') {
+      return {
+        status: file.status,
+        message: 'Transcription has not been started yet',
+      };
+    }
+
+    // Status is 'completed'
+    if (!file.transcribedText) {
+      throw new InternalServerErrorException('Transcription text not available');
+    }
+
+    return {
+      status: 'completed',
+      transcription: file.transcribedText,
+      fileId: file._id.toString(),
+      originalFilename: file.originalFilename,
+    };
+  }
 }

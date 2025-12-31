@@ -375,4 +375,128 @@ describe('MediaService', () => {
       );
     });
   });
+
+  describe('getTranscription', () => {
+    it('should return transcription for completed file', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+      const transcribedText = 'This is the transcribed text';
+      const completedFile = { 
+        ...mockMediaFile, 
+        status: 'completed',
+        transcribedText,
+      };
+      
+      mockMediaFileModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(completedFile),
+      });
+
+      const result = await service.getTranscription(fileId);
+
+      expect(mockMediaFileModel.findById).toHaveBeenCalledWith(fileId);
+      expect(result.status).toBe('completed');
+      expect(result.transcription).toBe(transcribedText);
+      expect(result.fileId).toBe(fileId);
+      expect(result.originalFilename).toBe(completedFile.originalFilename);
+    });
+
+    it('should return processing status with progress for processing file', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+      const processingFile = { 
+        ...mockMediaFile, 
+        status: 'processing',
+        progress: 45,
+      };
+      
+      mockMediaFileModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(processingFile),
+      });
+
+      const result = await service.getTranscription(fileId);
+
+      expect(result.status).toBe('processing');
+      expect(result.progress).toBe(45);
+      expect(result.message).toBe('Transcription is in progress');
+      expect(result.transcription).toBeUndefined();
+    });
+
+    it('should return error status with message for failed file', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+      const errorMessage = 'Service unavailable';
+      const errorFile = { 
+        ...mockMediaFile, 
+        status: 'error',
+        errorMessage,
+      };
+      
+      mockMediaFileModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(errorFile),
+      });
+
+      const result = await service.getTranscription(fileId);
+
+      expect(result.status).toBe('error');
+      expect(result.message).toBe(errorMessage);
+      expect(result.transcription).toBeUndefined();
+    });
+
+    it('should return ready status for file not yet transcribed', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+      const readyFile = { 
+        ...mockMediaFile, 
+        status: 'ready',
+      };
+      
+      mockMediaFileModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(readyFile),
+      });
+
+      const result = await service.getTranscription(fileId);
+
+      expect(result.status).toBe('ready');
+      expect(result.message).toBe('Transcription has not been started yet');
+      expect(result.transcription).toBeUndefined();
+    });
+
+    it('should return uploading status for file still uploading', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+      const uploadingFile = { 
+        ...mockMediaFile, 
+        status: 'uploading',
+      };
+      
+      mockMediaFileModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(uploadingFile),
+      });
+
+      const result = await service.getTranscription(fileId);
+
+      expect(result.status).toBe('uploading');
+      expect(result.message).toBe('Transcription has not been started yet');
+    });
+
+    it('should throw error if file not found', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+      
+      mockMediaFileModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(null),
+      });
+
+      await expect(service.getTranscription(fileId)).rejects.toThrow('File not found');
+    });
+
+    it('should throw error if completed file has no transcribed text', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+      const completedFile = { 
+        ...mockMediaFile, 
+        status: 'completed',
+        transcribedText: null,
+      };
+      
+      mockMediaFileModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(completedFile),
+      });
+
+      await expect(service.getTranscription(fileId)).rejects.toThrow('Transcription text not available');
+    });
+  });
 });
