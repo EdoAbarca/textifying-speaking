@@ -105,6 +105,26 @@
   - Dashboard updates automatically without page refresh
   - Scalable architecture for handling multiple concurrent transcriptions
 
+- **View Transcription (US-08)**: Access and review transcribed text
+  - Dedicated GET `/media/:id/transcription` endpoint for secure access
+  - View transcribed text in responsive modal dialog
+  - Copy-to-clipboard functionality for easy text extraction
+  - Displays file metadata (filename, file ID) with transcription
+  - Status-aware responses:
+    - Completed: Returns full transcription text
+    - Processing: Shows progress and "in progress" message
+    - Error: Displays error message from failed transcription
+    - Ready/Uploading: Indicates transcription hasn't started
+  - Ownership validation (users can only view their own transcriptions)
+  - Real-time UI updates when transcription completes via WebSocket
+  - Scrollable container for long transcriptions
+  - Whitespace-preserved text formatting
+  - Error handling for missing or incomplete transcriptions
+  - JWT-protected endpoint ensuring data privacy
+  - Integrates with existing Dashboard file cards
+  - "View Text" button appears for completed files with transcription
+
+
 ## Tech Stack
 
 ### Backend
@@ -510,6 +530,82 @@ curl -X POST http://localhost:3001/media/507f1f77bcf86cd799439011/transcribe \
 - Supports GPU acceleration when available
 - Timeout: 5 minutes per file
 - Automatic chunking for long audio (30-second chunks)
+
+#### GET `/media/:id/transcription`
+Retrieve the transcription text for a transcribed file.
+
+**Authentication:** Required (Bearer JWT token)
+
+**Path Parameters:**
+- `id`: File ID (MongoDB ObjectId)
+
+**Example (curl):**
+```bash
+curl -X GET http://localhost:3001/media/507f1f77bcf86cd799439011/transcription \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Success Response (200) - Completed File:**
+```json
+{
+  "status": "completed",
+  "transcription": "This is the transcribed text from the audio file...",
+  "fileId": "507f1f77bcf86cd799439011",
+  "originalFilename": "audio.mp3"
+}
+```
+
+**Success Response (200) - Processing File:**
+```json
+{
+  "status": "processing",
+  "progress": 75,
+  "message": "Transcription is in progress"
+}
+```
+
+**Success Response (200) - Error File:**
+```json
+{
+  "status": "error",
+  "message": "Transcription failed: Service unavailable"
+}
+```
+
+**Success Response (200) - Ready/Uploading File:**
+```json
+{
+  "status": "ready",
+  "message": "Transcription has not been started yet"
+}
+```
+
+**Error Responses:**
+- `401 Unauthorized`: Missing or invalid JWT token
+- `403 Forbidden`: User does not own the file
+- `404 Not Found`: File not found
+- `500 Internal Server Error`: Completed file has no transcription text (data inconsistency)
+
+**Behavior:**
+- Validates file ownership before returning transcription
+- Returns different responses based on file status:
+  - `completed`: Returns full transcription text with file metadata
+  - `processing`: Returns progress percentage and status message
+  - `error`: Returns error message from failed transcription
+  - `ready`/`uploading`: Returns message indicating transcription hasn't started
+- Only the file owner can retrieve transcription (enforces data privacy)
+
+**Use Cases:**
+- Display transcribed text in UI after completion
+- Check transcription status without fetching full file details
+- Implement "View Transcription" feature in frontend
+- Poll for completion status (though WebSockets are preferred for real-time updates)
+
+**Best Practices:**
+- Use WebSocket events for real-time status updates instead of polling this endpoint
+- This endpoint is ideal for retrieving transcription after page reload or direct navigation
+- Handle all status responses gracefully in UI (show spinner for processing, error message for errors, etc.)
+
 
 ## Project Structure
 
