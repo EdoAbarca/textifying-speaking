@@ -241,4 +241,22 @@ export class MediaController {
       },
     };
   }
+
+  @Get(':id/transcription')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  async getTranscription(@Param('id') id: string, @Request() req) {
+    const file = await this.mediaService.findById(id);
+
+    if (!file) {
+      throw new NotFoundException('File not found');
+    }
+
+    // Verify file ownership
+    if (file.userId.toString() !== req.user.sub) {
+      throw new ForbiddenException('You do not have permission to view this transcription');
+    }
+
+    return this.mediaService.getTranscription(id);
+  }
 }
