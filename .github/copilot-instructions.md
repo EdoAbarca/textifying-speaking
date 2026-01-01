@@ -40,6 +40,8 @@ ts-back/          # NestJS backend (TypeScript)
       media.module.ts
       transcription.processor.ts # BullMQ processor for async transcription
       transcription.processor.spec.ts # Unit tests for processor
+      summarization.processor.ts # BullMQ processor for async summarization
+      summarization.processor.spec.ts # Unit tests for processor
     app.module.ts # Main module with MongoDB, BullMQ & Config
     main.ts       # Entry point with ValidationPipe
   test/           # E2E tests
@@ -73,7 +75,12 @@ ts-transcription/ # Python transcription service
   requirements.txt # Python dependencies (flask, torch, transformers, accelerate)
   Dockerfile      # Python 3.11-slim with FFmpeg
   README.md       # Service documentation
-docker-compose.yml # Orchestrates backend, frontend, transcription, MongoDB
+ts-summarization/ # Python summarization service
+  app.py          # Flask app with mT5 multilingual model
+  requirements.txt # Python dependencies (flask, torch, transformers, accelerate, sentencepiece)
+  Dockerfile      # Python 3.11-slim
+  README.md       # Service documentation
+docker-compose.yml # Orchestrates backend, frontend, transcription, summarization, MongoDB
 Makefile          # Development commands
 ```
 
@@ -659,3 +666,138 @@ curl -X POST http://localhost:3001/media/upload \
   - Supports future optimizations (e.g., lazy loading transcription text)
   - Maintains data privacy through ownership validation
   - Real-time updates via WebSocket ensure UI stays synchronized
+### US-09: Summarize Transcription ✅
+- **Backend**:
+  - MediaFile schema extended with summary fields:
+    - `summaryText` (string): Stores generated summary
+    - `summaryStatus` (enum): pending, processing, completed, error
+    - `summaryErrorMessage` (string): Error details if summarization fails
+  - POST `/media/:id/summarize` endpoint:
+    - JWT authentication with JwtAuthGuard
+    - File ownership validation (403 if unauthorized)
+    - Validates transcription is completed before summarization
+    - Validates transcribedText exists
+    - Prevents duplicate summarization (rejects if already processing)
+    - Enqueues summarization job to BullMQ
+    - Returns immediately with 200 status (non-blocking)
+  - MediaService.summarizeFile method:
+    - Updates summaryStatus to 'processing'
+    - Adds job to 'summarization' queue with retry strategy
+    - Job configuration: 3 attempts, exponential backoff (5s delay)
+  - MediaService.updateSummaryStatus method:
+    - Updates summaryStatus, summaryText, summaryErrorMessage
+    - Returns updated MediaFileDocument
+  - SummarizationProcessor worker:
+    - Concurrency: 2 jobs simultaneously
+    - Calls Python summarization service via axios
+    - Sends transcribedText as JSON payload
+    - Updates database with summary on completion
+    - Emits WebSocket events for real-time updates
+    - Error handling with status update to 'error'
+    - Stores error message for debugging
+  - MediaGateway.emitSummaryStatusUpdate method:
+    - Broadcasts to user's WebSocket connections
+    - Event: 'summaryStatusUpdate'
+    - Payload: fileId, summaryStatus, summaryText?, summaryErrorMessage?, originalFilename?
+  - Unit tests for SummarizationProcessor:
+    - Successful summarization
+    - File not found error
+    - Missing transcribed text error
+    - Summarization service error
+    - API error response (5 test cases total)
+  - E2E tests for POST `/media/:id/summarize`:
+    - Successful summarization start (200)
+    - Unauthorized access (401)
+    - Forbidden access to other user's file (403)
+    - Non-existent file (404)
+    - File without completed transcription (400)
+    - File without transcribed text (400)
+    - Already summarizing (400) (7 test cases total)
+- **Summarization Service**:
+  - Python 3.11 Flask application on port 5001
+  - mT5_multilingual_XLSum model via HuggingFace Transformers
+  - Supports 45+ languages for multilingual summarization
+  - POST `/summarize` endpoint:
+    - Accepts JSON with 'text' field
+    - Validates text is present and non-empty
+    - Returns JSON: { success: true, summary: string, model: string }
+  - Automatic chunking for long texts (>512 words)
+  - Configurable summary length (30-150 tokens)
+  - GPU acceleration support via CUDA
+  - Error handling and logging
+  - GET `/health` endpoint for service monitoring
+  - Docker containerized with python:3.11-slim
+  - Dependencies: flask, torch, transformers, accelerate, sentencepiece
+- **Frontend**:
+  - Dashboard enhancements:
+    - State management for summarizingFiles (Set of file IDs)
+    - handleSummarizeClick: Calls POST `/media/:id/summarize` endpoint
+    - handleViewSummary: Opens summary modal
+    - handleCopySummaryToClipboard: Copies summary to clipboard
+    - handleSummaryStatusUpdate: Callback for WebSocket events
+      - Updates file state with summaryStatus, summaryText, summaryErrorMessage
+      - Toast notifications for start, completion, error
+      - Removes from summarizingFiles set on completion/error
+  - UI components:
+    - "Summarize" button for completed files with transcribedText (purple, no summary yet)
+    - "View Summary" button for files with summaryText (purple)
+    - Summary modal with:
+      - File metadata display (originalFilename)
+      - Summary section with copy-to-clipboard (purple theme)
+      - Original transcription section with copy-to-clipboard (indigo theme)
+      - Scrollable containers for long texts
+      - Whitespace-preserved formatting
+      - Close button
+  - Real-time updates:
+    - useFileStatus hook extended with onSummaryStatusUpdate callback
+    - WebSocket listener for 'summaryStatusUpdate' event
+    - FloatingProgressIndicator updated to show summarization (purple gradient)
+    - Toast notifications with rich content (icons, file names, error messages)
+  - Icons:
+    - mdi:file-document-outline (Summarize button)
+    - mdi:file-document-check-outline (View Summary button, summary modal)
+- **Docker & Infrastructure**:
+  - Summarization service added to docker-compose.yml:
+    - Service name: `summarization` (container: ts-summarization)
+    - Port: 5001
+    - Environment: PORT=5001, CUDA_VISIBLE_DEVICES=0
+    - GPU support via nvidia driver
+    - Network: textifying-speaking-network
+  - Backend depends on summarization service
+  - Environment variable: SUMMARIZATION_SERVICE_URL=http://summarization:5001
+  - Makefile commands added:
+    - `make logs-summarization` - view logs
+    - `make shell-summarization` - access container
+    - `make health` - includes summarization health check
+- **Testing**:
+  - Backend unit tests: SummarizationProcessor (5 tests)
+  - Backend E2E tests: POST `/media/:id/summarize` (7 tests)
+  - All tests passing
+- **API Examples**:
+  ```bash
+  # Start summarization
+  curl -X POST http://localhost:3001/media/{fileId}/summarize \
+    -H "Authorization: Bearer $TOKEN"
+  
+  # Check summarization service health
+  curl http://localhost:5001/health
+  
+  # Test summarization service directly
+  curl -X POST http://localhost:5001/summarize \
+    -H "Content-Type: application/json" \
+    -d '{"text":"Your transcribed text here..."}'
+  ```
+- **Architecture Benefits**:
+  - Non-blocking API responses (immediate return after job enqueue)
+  - Scalable processing (configurable concurrency)
+  - Resilient error handling (automatic retries with backoff)
+  - Real-time progress feedback via WebSocket
+  - Independent service for summarization (isolated from transcription)
+  - Failed jobs retained for debugging
+- **Integration**:
+  - Works seamlessly with existing transcription workflow
+  - User can summarize after transcription completes
+  - Real-time UI updates without page refresh
+  - Summary and transcription displayed together in modal
+  - Maintains data privacy through ownership validation
+  - Purple theme distinguishes summarization from transcription (blue/indigo)
