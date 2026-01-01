@@ -4,7 +4,7 @@ import { Icon } from '@iconify/react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import * as yup from 'yup';
-import { useAuthStore } from '../store/authStore';
+import useAuthStore from '../store/authStore';
 
 // Validation schema
 const uploadSchema = yup.object().shape({
