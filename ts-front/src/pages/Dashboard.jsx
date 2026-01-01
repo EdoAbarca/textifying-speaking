@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from '@iconify/react';
 import { toast } from 'react-toastify';
-import axios from 'axios';
 import useAuthStore from '../store/authStore';
 import { useFileStatus } from '../hooks/useFileStatus';
 import FloatingProgressIndicator from '../components/FloatingProgressIndicator';
@@ -14,8 +13,10 @@ export default function Dashboard() {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showTranscriptionModal, setShowTranscriptionModal] = useState(false);
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [fileToDelete, setFileToDelete] = useState(null);
   const [transcribingFiles, setTranscribingFiles] = useState(new Set());
+  const [summarizingFiles, setSummarizingFiles] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
   const { token } = useAuthStore();
   const navigate = useNavigate();
@@ -112,8 +113,95 @@ export default function Dashboard() {
     });
   }, []);
 
+  const handleSummaryStatusUpdate = useCallback((data) => {
+    setFiles((prevFiles) => {
+      const fileIndex = prevFiles.findIndex(f => f.id === data.fileId);
+      if (fileIndex >= 0) {
+        const newFiles = [...prevFiles];
+        const oldSummaryStatus = newFiles[fileIndex].summaryStatus;
+        
+        // Update summary fields
+        newFiles[fileIndex] = {
+          ...newFiles[fileIndex],
+          summaryStatus: data.summaryStatus,
+          summaryText: data.summaryText || newFiles[fileIndex].summaryText,
+          summaryErrorMessage: data.summaryErrorMessage || newFiles[fileIndex].summaryErrorMessage,
+        };
+        
+        // Show notifications for status changes
+        if (oldSummaryStatus !== data.summaryStatus) {
+          if (data.summaryStatus === 'processing') {
+            toast.info(
+              <div className="flex items-center gap-2">
+                <Icon icon="mdi:cog" className="animate-spin" width={20} />
+                <div>
+                  <div className="font-semibold">Summarization started</div>
+                  <div className="text-sm opacity-90">{data.originalFilename}</div>
+                </div>
+              </div>,
+              { autoClose: 3000 }
+            );
+          } else if (data.summaryStatus === 'completed') {
+            toast.success(
+              <div className="flex items-center gap-2">
+                <Icon icon="mdi:check-circle" width={20} />
+                <div>
+                  <div className="font-semibold">Summarization completed!</div>
+                  <div className="text-sm opacity-90">{data.originalFilename}</div>
+                </div>
+              </div>,
+              { autoClose: 5000 }
+            );
+            // Remove from summarizing set
+            setSummarizingFiles(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(data.fileId);
+              return newSet;
+            });
+          } else if (data.summaryStatus === 'error') {
+            toast.error(
+              <div className="flex items-center gap-2">
+                <Icon icon="mdi:alert-circle" width={20} />
+                <div>
+                  <div className="font-semibold">Summarization failed</div>
+                  <div className="text-sm opacity-90">{data.originalFilename}</div>
+                  {data.summaryErrorMessage && (
+                    <div className="text-xs mt-1 opacity-75">{data.summaryErrorMessage}</div>
+                  )}
+                </div>
+              </div>,
+              { autoClose: 7000 }
+            );
+            // Remove from summarizing set
+            setSummarizingFiles(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(data.fileId);
+              return newSet;
+            });
+          }
+        }
+        
+        return newFiles;
+      }
+      return prevFiles;
+    });
+
+    // Update selected file if it's the one being viewed
+    setSelectedFile((prevSelectedFile) => {
+      if (prevSelectedFile && prevSelectedFile.id === data.fileId) {
+        return {
+          ...prevSelectedFile,
+          summaryStatus: data.summaryStatus,
+          summaryText: data.summaryText || prevSelectedFile.summaryText,
+          summaryErrorMessage: data.summaryErrorMessage || prevSelectedFile.summaryErrorMessage,
+        };
+      }
+      return prevSelectedFile;
+    });
+  }, []);
+
   // Initialize WebSocket connection
-  const { isConnected } = useFileStatus(handleFileStatusUpdate, handleFileProgress);
+  const { isConnected } = useFileStatus(handleFileStatusUpdate, handleFileProgress, handleSummaryStatusUpdate);
 
   useEffect(() => {
     if (!token) {
@@ -121,6 +209,7 @@ export default function Dashboard() {
       return;
     }
     fetchFiles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, navigate]);
 
   const fetchFiles = async () => {
@@ -187,6 +276,51 @@ export default function Dashboard() {
   const handleViewTranscription = (file) => {
     setSelectedFile(file);
     setShowTranscriptionModal(true);
+  };
+
+  const handleSummarizeClick = async (file) => {
+    try {
+      setSummarizingFiles(prev => new Set(prev).add(file.id));
+      
+      const response = await fetch(`http://localhost:3001/media/${file.id}/summarize`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to start summarization');
+      }
+
+      toast.info(`Summarization started for "${file.originalFilename}"`);
+    } catch (error) {
+      console.error('Error starting summarization:', error);
+      toast.error(error.message || 'Failed to start summarization. Please try again.');
+      setSummarizingFiles(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(file.id);
+        return newSet;
+      });
+    }
+  };
+
+  const handleViewSummary = (file) => {
+    setSelectedFile(file);
+    setShowSummaryModal(true);
+  };
+
+  const handleCopySummaryToClipboard = async () => {
+    if (selectedFile && selectedFile.summaryText) {
+      try {
+        await navigator.clipboard.writeText(selectedFile.summaryText);
+        toast.success('Summary copied to clipboard!');
+      } catch (error) {
+        console.error('Error copying to clipboard:', error);
+        toast.error('Failed to copy to clipboard');
+      }
+    }
   };
 
   const handleDeleteConfirm = async () => {
@@ -358,13 +492,34 @@ export default function Dashboard() {
                       </button>
                     )}
                     {file.status === 'completed' && file.transcribedText && (
-                      <button
-                        onClick={() => handleViewTranscription(file)}
-                        className="flex-1 px-3 py-2 bg-indigo-500 text-white text-sm rounded-lg hover:bg-indigo-600 transition-colors flex items-center justify-center gap-2"
-                      >
-                        <Icon icon="mdi:text-box-outline" width={18} />
-                        View Text
-                      </button>
+                      <>
+                        <button
+                          onClick={() => handleViewTranscription(file)}
+                          className="flex-1 px-3 py-2 bg-indigo-500 text-white text-sm rounded-lg hover:bg-indigo-600 transition-colors flex items-center justify-center gap-2"
+                        >
+                          <Icon icon="mdi:text-box-outline" width={18} />
+                          View Text
+                        </button>
+                        {!file.summaryText && file.summaryStatus !== 'processing' && (
+                          <button
+                            onClick={() => handleSummarizeClick(file)}
+                            disabled={summarizingFiles.has(file.id)}
+                            className="flex-1 px-3 py-2 bg-purple-500 text-white text-sm rounded-lg hover:bg-purple-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                          >
+                            <Icon icon="mdi:file-document-outline" width={18} />
+                            Summarize
+                          </button>
+                        )}
+                        {file.summaryText && (
+                          <button
+                            onClick={() => handleViewSummary(file)}
+                            className="flex-1 px-3 py-2 bg-purple-500 text-white text-sm rounded-lg hover:bg-purple-600 transition-colors flex items-center justify-center gap-2"
+                          >
+                            <Icon icon="mdi:file-document-check-outline" width={18} />
+                            View Summary
+                          </button>
+                        )}
+                      </>
                     )}
                     <button
                       onClick={() => handleDeleteClick(file)}
@@ -632,6 +787,102 @@ export default function Dashboard() {
               <div className="mt-6 pt-6 border-t border-gray-200 flex justify-end">
                 <button
                   onClick={() => setShowTranscriptionModal(false)}
+                  className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Summary Modal */}
+      {showSummaryModal && selectedFile && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-gray-800">Summary</h2>
+              <button
+                onClick={() => setShowSummaryModal(false)}
+                className="text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                <Icon icon="mdi:close" width={24} />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="bg-purple-50 rounded-lg p-4 mb-6 border border-purple-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <Icon icon="mdi:file-document-outline" width={20} className="text-purple-600" />
+                  <span className="text-sm font-medium text-purple-900">{selectedFile.originalFilename}</span>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-6 border border-gray-200 mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Icon icon="mdi:file-document-check-outline" width={24} className="text-purple-500" />
+                    <span className="text-sm font-medium text-gray-700">Summary</span>
+                  </div>
+                  <button
+                    onClick={handleCopySummaryToClipboard}
+                    className="flex items-center gap-2 px-3 py-1 bg-purple-500 text-white text-sm rounded-lg hover:bg-purple-600 transition-colors"
+                  >
+                    <Icon icon="mdi:content-copy" width={16} />
+                    Copy
+                  </button>
+                </div>
+                
+                {selectedFile.summaryText ? (
+                  <div className="bg-white rounded-lg p-4 border border-gray-200">
+                    <p className="text-gray-800 whitespace-pre-wrap leading-relaxed">
+                      {selectedFile.summaryText}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Icon icon="mdi:file-document-remove-outline" width={48} className="text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-500">No summary available</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-indigo-50 rounded-lg p-6 border border-indigo-200">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Icon icon="mdi:text-box-outline" width={24} className="text-indigo-500" />
+                    <span className="text-sm font-medium text-gray-700">Original Transcription</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(selectedFile.transcribedText || '');
+                      toast.success('Transcription copied to clipboard!');
+                    }}
+                    className="flex items-center gap-2 px-3 py-1 bg-indigo-500 text-white text-sm rounded-lg hover:bg-indigo-600 transition-colors"
+                  >
+                    <Icon icon="mdi:content-copy" width={16} />
+                    Copy
+                  </button>
+                </div>
+                
+                {selectedFile.transcribedText ? (
+                  <div className="bg-white rounded-lg p-4 border border-gray-200 max-h-60 overflow-y-auto">
+                    <p className="text-gray-800 whitespace-pre-wrap leading-relaxed text-sm">
+                      {selectedFile.transcribedText}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Icon icon="mdi:text-box-remove-outline" width={48} className="text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-500">No transcription text available</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-6 pt-6 border-t border-gray-200 flex justify-end">
+                <button
+                  onClick={() => setShowSummaryModal(false)}
                   className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
                 >
                   Close
