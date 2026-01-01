@@ -11,6 +11,7 @@ import { MediaService } from './media.service';
 import { MediaGateway } from './media.gateway';
 import { MediaFile, MediaFileSchema } from './schemas/media-file.schema';
 import { TranscriptionProcessor } from './transcription.processor';
+import { SummarizationProcessor } from './summarization.processor';
 
 const ALLOWED_MIMETYPES = [
   'audio/mpeg', // .mp3
@@ -30,6 +31,9 @@ const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
     ]),
     BullModule.registerQueue({
       name: 'transcription',
+    }),
+    BullModule.registerQueue({
+      name: 'summarization',
     }),
     MulterModule.register({
       storage: diskStorage({
@@ -65,7 +69,7 @@ const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
     }),
   ],
   controllers: [MediaController],
-  providers: [MediaService, MediaGateway, TranscriptionProcessor],
+  providers: [MediaService, MediaGateway, TranscriptionProcessor, SummarizationProcessor],
   exports: [MediaService],
 })
 export class MediaModule {}
