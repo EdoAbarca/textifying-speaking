@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
+import { getQueueToken } from '@nestjs/bullmq';
 import { MediaService } from './media.service';
 import { MediaFile, MediaFileDocument } from './schemas/media-file.schema';
 import axios from 'axios';
@@ -41,6 +42,10 @@ describe('MediaService', () => {
     get: jest.fn().mockReturnValue('http://ts-transcription:5000'),
   };
 
+  const mockSummarizationQueue = {
+    add: jest.fn().mockResolvedValue({}),
+  };
+
   jest.mock('axios');
 
   beforeEach(async () => {
@@ -56,6 +61,10 @@ describe('MediaService', () => {
         {
           provide: ConfigService,
           useValue: mockConfigService,
+        },
+        {
+          provide: getQueueToken('summarization'),
+          useValue: mockSummarizationQueue,
         },
       ],
     }).compile();
