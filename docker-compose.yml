@@ -16,8 +16,85 @@ services:
     container_name: ts-backend
     ports:
       - "3001:3001"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/textifying-speaking
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - TRANSCRIPTION_SERVICE_URL=http://transcription:5000
+      - SUMMARIZATION_SERVICE_URL=http://summarization:5001
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    networks:
+      - textifying-speaking-network
+    depends_on:
+      - mongodb
+      - transcription
+      - summarization
+      - redis
+
+  transcription:
+    build:
+      context: ./ts-transcription
+    container_name: ts-transcription
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - CUDA_VISIBLE_DEVICES=0
+    networks:
+      - textifying-speaking-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  summarization:
+    build:
+      context: ./ts-summarization
+    container_name: ts-summarization
+    ports:
+      - "5001:5001"
+    environment:
+      - PORT=5001
+      - CUDA_VISIBLE_DEVICES=0
+    networks:
+      - textifying-speaking-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  mongodb:
+    image: mongo:7.0
+    container_name: ts-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=textifying-speaking
+    volumes:
+      - mongodb_data:/data/db
     networks:
       - textifying-speaking-network
 
+  redis:
+    image: redis:7-alpine
+    container_name: ts-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - textifying-speaking-network
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+
 networks:
   textifying-speaking-network:
+
+volumes:
+  mongodb_data:
+  redis_data:
