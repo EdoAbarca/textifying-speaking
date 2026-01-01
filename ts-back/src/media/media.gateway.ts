@@ -96,4 +96,17 @@ export class MediaGateway implements OnGatewayConnection, OnGatewayDisconnect {
   emitFileProgress(userId: string, fileId: string, progress: number) {
     this.emitToUser(userId, 'fileProgress', { fileId, progress });
   }
+
+  emitSummaryStatusUpdate(
+    userId: string,
+    data: {
+      fileId: string;
+      summaryStatus: string;
+      summaryText?: string;
+      summaryErrorMessage?: string;
+      originalFilename?: string;
+    },
+  ) {
+    this.emitToUser(userId, 'summaryStatusUpdate', data);
+  }
 }
