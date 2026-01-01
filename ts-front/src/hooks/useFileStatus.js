@@ -4,7 +4,7 @@ import useAuthStore from '../store/authStore';
 
 const SOCKET_URL = 'http://localhost:3001/media';
 
-export const useFileStatus = (onFileStatusUpdate, onFileProgress) => {
+export const useFileStatus = (onFileStatusUpdate, onFileProgress, onSummaryStatusUpdate) => {
   const socketRef = useRef(null);
   const token = useAuthStore((state) => state.token);
 
@@ -49,7 +49,14 @@ export const useFileStatus = (onFileStatusUpdate, onFileProgress) => {
         onFileProgress(data);
       }
     });
-  }, [token, onFileStatusUpdate, onFileProgress]);
+
+    socketRef.current.on('summaryStatusUpdate', (data) => {
+      console.log('Summary status update received:', data);
+      if (onSummaryStatusUpdate) {
+        onSummaryStatusUpdate(data);
+      }
+    });
+  }, [token, onFileStatusUpdate, onFileProgress, onSummaryStatusUpdate]);
 
   const disconnect = useCallback(() => {
     if (socketRef.current) {

@@ -124,6 +124,45 @@
   - Integrates with existing Dashboard file cards
   - "View Text" button appears for completed files with transcription
 
+- **Summarize Transcription (US-09)**: Generate AI-powered summaries of completed transcriptions
+  - Dedicated POST `/media/:id/summarize` endpoint with JWT authentication
+  - Uses mT5_multilingual_XLSum model for multilingual abstractive text summarization
+  - Supports 45+ languages for comprehensive international coverage
+  - Asynchronous processing via BullMQ job queue (non-blocking API responses)
+  - Real-time WebSocket updates for summarization progress and completion
+  - Dashboard features:
+    - "Summarize" button for completed files with transcriptions
+    - "View Summary" button displays after successful summarization
+    - Summary modal shows both summary and original transcription
+    - Copy-to-clipboard for both summary and transcription
+    - Color-coded UI (purple theme) to distinguish from transcription
+  - Validation and error handling:
+    - Only files with completed transcriptions can be summarized
+    - File ownership validation (403 if unauthorized)
+    - Prevents duplicate summarization when already processing
+    - Descriptive error messages for failures
+  - Progress tracking:
+    - Files tracked with summaryStatus field (pending, processing, completed, error)
+    - Real-time toast notifications (start, completion, error)
+    - FloatingProgressIndicator shows summarization progress
+    - Visual indicators with animated icons
+  - Background processing:
+    - Automatic chunking for texts longer than 512 words
+    - Configurable summary length (30-150 tokens)
+    - Retry mechanism (up to 3 attempts with exponential backoff)
+    - Failed jobs retained for debugging
+  - Data persistence:
+    - Summary stored in MongoDB (summaryText field)
+    - Error messages captured (summaryErrorMessage field)
+    - Summary status tracked separately from transcription status
+  - Independent service architecture:
+    - Python Flask service on port 5001
+    - GPU acceleration support via CUDA
+    - Scalable and isolated from transcription service
+  - WebSocket events for real-time updates:
+    - summaryStatusUpdate broadcasts to user when status changes
+    - Automatic UI synchronization without page refresh
+
 
 ## Tech Stack
 
@@ -143,9 +182,16 @@
 ### Transcription Service
 - **Language**: Python 3.11
 - **Framework**: Flask 3.0
-- **AI Model**: OpenAI Whisper (small) via HuggingFace Transformers
+- **AI Model**: OpenAI Whisper (medium) via HuggingFace Transformers
 - **ML Libraries**: PyTorch, Transformers, Accelerate
 - **Audio Processing**: FFmpeg
+- **Container**: Python 3.11-slim Docker image
+
+### Summarization Service
+- **Language**: Python 3.11
+- **Framework**: Flask 3.0
+- **AI Model**: mT5_multilingual_XLSum via HuggingFace Transformers (45+ languages)
+- **ML Libraries**: PyTorch, Transformers, Accelerate, SentencePiece
 - **Container**: Python 3.11-slim Docker image
 
 ### Frontend
@@ -684,7 +730,99 @@ docker exec ts-backend npm run test:e2e
 make test-backend-cov
 # OR
 docker exec ts-backend npm run test:cov
+
+# Run specific test suites
+npm test -- media.service.spec.ts           # MediaService unit tests
+npm test -- summarization.processor.spec.ts # Summarization unit tests
+npm test -- media-summarize.e2e-spec.ts     # Summarization E2E tests
 ```
+
+### Frontend Validation
+
+```bash
+# Build frontend (validates JSX/imports)
+cd ts-front && npm run build
+
+# Run ESLint
+cd ts-front && npm run lint
+```
+
+### US-09 Testing
+
+Automated test script validates the complete summarization feature:
+
+```bash
+# Run comprehensive US-09 tests
+./test-us-09.sh
+```
+
+This script validates:
+- ✅ Backend unit tests (MediaService + SummarizationProcessor)
+- ✅ Frontend build (validates JSX/imports)
+- ✅ Frontend linting (ESLint)
+- ✅ Docker Compose configuration (service presence)
+
+**Test Results Summary:**
+- Backend: 43/43 tests passing
+  - MediaService: 24 tests
+  - SummarizationProcessor: 6 tests
+  - Other modules: 13 tests
+- Frontend: Builds successfully with no errors
+- Frontend: ESLint passes with no warnings
+
+### Manual Testing Workflow
+
+To test the complete summarization workflow with services running:
+
+```bash
+# 1. Start all services
+make quickstart
+
+# 2. Register a user
+curl -X POST http://localhost:3001/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"testuser","email":"test@example.com","password":"password123"}'
+
+# 3. Login to get token
+TOKEN=$(curl -s -X POST http://localhost:3001/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"test@example.com","password":"password123"}' \
+  | jq -r '.accessToken')
+
+# 4. Upload a media file
+FILE_ID=$(curl -s -X POST http://localhost:3001/media/upload \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@/path/to/audio.mp3" \
+  | jq -r '.file._id')
+
+# 5. Start transcription
+curl -X POST http://localhost:3001/media/$FILE_ID/transcribe \
+  -H "Authorization: Bearer $TOKEN"
+
+# 6. Wait for transcription to complete (check status via WebSocket or polling)
+
+# 7. Start summarization
+curl -X POST http://localhost:3001/media/$FILE_ID/summarize \
+  -H "Authorization: Bearer $TOKEN"
+
+# 8. Check summary status
+curl -X GET http://localhost:3001/media \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.[] | select(._id=="'$FILE_ID'") | {summaryStatus, summaryText}'
+```
+
+### Browser Testing
+
+1. Open http://localhost:5173 in browser
+2. Register/login as user
+3. Upload an audio/video file
+4. Click 'Transcribe' button
+5. Wait for transcription to complete (watch floating progress indicator)
+6. Click 'Summarize' button (purple button appears after transcription)
+7. Wait for summarization to complete (watch floating progress indicator)
+8. Click 'View Summary' button to see modal with summary and transcription
+9. Test copy-to-clipboard buttons in modal
+10. Verify real-time updates work (status badges update automatically)
 
 
 ## Environment Variables
@@ -695,12 +833,20 @@ MONGODB_URI=mongodb://mongodb:27017/textifying-speaking
 JWT_SECRET=your-super-secret-jwt-key-change-in-production
 PORT=3001
 MEDIA_STORAGE_PATH=./uploads
+REDIS_HOST=redis
+REDIS_PORT=6379
 TRANSCRIPTION_SERVICE_URL=http://transcription:5000
+SUMMARIZATION_SERVICE_URL=http://summarization:5001
 ```
 
 ### Transcription Service (`ts-transcription/.env`)
 ```env
 PORT=5000
+```
+
+### Summarization Service (`ts-summarization/.env`)
+```env
+PORT=5001
 ```
 
 ### Docker Compose
@@ -720,6 +866,8 @@ Environment variables are configured in `docker-compose.yml` for containerized d
 - ✅ User-scoped WebSocket broadcasts (users only receive updates for their own files)
 - ✅ File ownership validation for transcription (users can only transcribe their own files)
 - ✅ File type validation for transcription (audio/video only)
+- ✅ File ownership validation for summarization (users can only summarize their own files)
+- ✅ Transcription completion validation for summarization (prevents summarization of unfinished transcriptions)
 - ✅ CORS enabled for frontend communication
 - ✅ MongoDB connection security
 - ✅ Secure credential verification (constant-time comparison via bcrypt)

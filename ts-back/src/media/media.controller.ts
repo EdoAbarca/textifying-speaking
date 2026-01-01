@@ -259,4 +259,45 @@ export class MediaController {
 
     return this.mediaService.getTranscription(id);
   }
+
+  @Post(':id/summarize')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  async summarizeFile(@Param('id') id: string, @Request() req) {
+    const file = await this.mediaService.findById(id);
+
+    if (!file) {
+      throw new NotFoundException('File not found');
+    }
+
+    // Verify file ownership
+    if (file.userId.toString() !== req.user.sub) {
+      throw new ForbiddenException('You do not have permission to summarize this file');
+    }
+
+    // Check if file has completed transcription
+    if (file.status !== 'completed') {
+      throw new BadRequestException('File transcription must be completed before summarization');
+    }
+
+    if (!file.transcribedText) {
+      throw new BadRequestException('No transcribed text available for summarization');
+    }
+
+    // Check if already summarizing
+    if (file.summaryStatus === 'processing') {
+      throw new BadRequestException('File is already being summarized');
+    }
+
+    // Enqueue summarization job
+    await this.mediaService.summarizeFile(file._id.toString(), req.user.sub);
+
+    return {
+      message: 'Summarization started',
+      file: {
+        id: file._id,
+        summaryStatus: 'processing',
+      },
+    };
+  }
 }

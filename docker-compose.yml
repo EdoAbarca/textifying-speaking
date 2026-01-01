@@ -20,6 +20,7 @@ services:
       - MONGODB_URI=mongodb://mongodb:27017/textifying-speaking
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - TRANSCRIPTION_SERVICE_URL=http://transcription:5000
+      - SUMMARIZATION_SERVICE_URL=http://summarization:5001
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     networks:
@@ -27,6 +28,7 @@ services:
     depends_on:
       - mongodb
       - transcription
+      - summarization
       - redis
 
   transcription:
@@ -37,6 +39,25 @@ services:
       - "5000:5000"
     environment:
       - PORT=5000
+      - CUDA_VISIBLE_DEVICES=0
+    networks:
+      - textifying-speaking-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  summarization:
+    build:
+      context: ./ts-summarization
+    container_name: ts-summarization
+    ports:
+      - "5001:5001"
+    environment:
+      - PORT=5001
       - CUDA_VISIBLE_DEVICES=0
     networks:
       - textifying-speaking-network

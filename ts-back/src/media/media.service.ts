@@ -1,4 +1,4 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Inject } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { MediaFile, MediaFileDocument } from './schemas/media-file.schema';
@@ -7,6 +7,9 @@ import axios from 'axios';
 import FormData from 'form-data';
 import * as fsSync from 'fs';
 import { ConfigService } from '@nestjs/config';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { SummarizationJobData } from './summarization.processor';
 
 @Injectable()
 export class MediaService {
@@ -16,6 +19,7 @@ export class MediaService {
     @InjectModel(MediaFile.name)
     private mediaFileModel: Model<MediaFileDocument>,
     private configService: ConfigService,
+    @InjectQueue('summarization') private summarizationQueue: Queue<SummarizationJobData>,
   ) {
     this.transcriptionServiceUrl = this.configService.get<string>(
       'TRANSCRIPTION_SERVICE_URL',
@@ -218,5 +222,51 @@ export class MediaService {
       fileId: file._id.toString(),
       originalFilename: file.originalFilename,
     };
+  }
+
+  async summarizeFile(fileId: string, userId: string): Promise<void> {
+    // Update summary status to processing
+    await this.mediaFileModel
+      .findByIdAndUpdate(fileId, { summaryStatus: 'processing' })
+      .exec();
+
+    // Add summarization job to queue
+    await this.summarizationQueue.add(
+      'summarize',
+      {
+        fileId,
+        userId,
+      },
+      {
+        removeOnComplete: true,
+        removeOnFail: false,
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 5000,
+        },
+      },
+    );
+  }
+
+  async updateSummaryStatus(
+    fileId: string,
+    summaryStatus: 'pending' | 'processing' | 'completed' | 'error',
+    summaryText?: string,
+    summaryErrorMessage?: string,
+  ): Promise<MediaFileDocument | null> {
+    const updateData: any = { summaryStatus };
+    
+    if (summaryText !== undefined) {
+      updateData.summaryText = summaryText;
+    }
+    
+    if (summaryErrorMessage !== undefined) {
+      updateData.summaryErrorMessage = summaryErrorMessage;
+    }
+
+    return this.mediaFileModel
+      .findByIdAndUpdate(fileId, updateData, { new: true })
+      .exec();
   }
 }

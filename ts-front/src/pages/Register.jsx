@@ -101,7 +101,7 @@ export default function Register() {
 
       // Success!
       setShowModal(true);
-    } catch (error) {
+    } catch {
       toast.error('Network error. Please check your connection and try again.');
     } finally {
       setIsLoading(false);

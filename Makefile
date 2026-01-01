@@ -1,4 +1,4 @@
-.PHONY: help build up down start stop restart logs clean test test-backend test-frontend install install-backend install-frontend dev-backend dev-frontend shell-backend shell-frontend shell-transcription shell-redis db-shell redis-cli
+.PHONY: help build up down start stop restart logs clean test test-backend test-frontend install install-backend install-frontend dev-backend dev-frontend shell-backend shell-frontend shell-transcription shell-summarization shell-redis db-shell redis-cli
 
 # Default target
 help:
@@ -16,6 +16,7 @@ help:
 	@echo "  make logs-backend   - View backend logs"
 	@echo "  make logs-frontend  - View frontend logs"
 	@echo "  make logs-transcription - View transcription service logs"
+	@echo "  make logs-summarization - View summarization service logs"
 	@echo "  make logs-mongodb   - View MongoDB logs"
 	@echo "  make logs-redis     - View Redis logs"
 	@echo "  make clean          - Stop containers and remove volumes"
@@ -37,6 +38,7 @@ help:
 	@echo "  make shell-backend  - Access backend container shell"
 	@echo "  make shell-frontend - Access frontend container shell"
 	@echo "  make shell-transcription - Access transcription service shell"
+	@echo "  make shell-summarization - Access summarization service shell"
 	@echo "  make shell-redis    - Access Redis container shell"
 	@echo "  make redis-cli      - Access Redis CLI"
 	@echo "  make db-shell       - Access MongoDB shell"
@@ -56,6 +58,7 @@ up:
 	@echo "  Frontend:       http://localhost:5173"
 	@echo "  Backend:        http://localhost:3001"
 	@echo "  Transcription:  http://localhost:5000"
+	@echo "  Summarization:  http://localhost:5001"
 	@echo "  MongoDB:        mongodb://localhost:27017"
 	@echo "  Redis:          redis://localhost:6379"
 
@@ -86,6 +89,9 @@ logs-frontend:
 
 logs-transcription:
 	docker compose logs -f transcription
+
+logs-summarization:
+	docker compose logs -f summarization
 
 logs-mongodb:
 	docker compose logs -f mongodb
@@ -144,6 +150,9 @@ shell-frontend:
 shell-transcription:
 	docker exec -it ts-transcription sh
 
+shell-summarization:
+	docker exec -it ts-summarization sh
+
 shell-redis:
 	docker exec -it ts-redis sh
 
@@ -162,6 +171,8 @@ health:
 	@curl -s -o /dev/null -w "%{http_code}" http://localhost:3001 && echo " ✓" || echo " ✗"
 	@echo -n "Transcription (http://localhost:5000/health): "
 	@curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/health && echo " ✓" || echo " ✗"
+	@echo -n "Summarization (http://localhost:5001/health): "
+	@curl -s -o /dev/null -w "%{http_code}" http://localhost:5001/health && echo " ✓" || echo " ✗"
 	@echo -n "MongoDB (localhost:27017): "
 	@docker exec ts-mongodb mongosh --eval "db.adminCommand('ping')" > /dev/null 2>&1 && echo " ✓" || echo " ✗"
 	@echo -n "Redis (localhost:6379): "

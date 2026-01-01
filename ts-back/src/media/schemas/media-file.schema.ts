@@ -40,6 +40,17 @@ export class MediaFile {
 
   @Prop()
   transcribedText?: string;
+
+  @Prop()
+  summaryText?: string;
+
+  @Prop({
+    enum: ['pending', 'processing', 'completed', 'error'],
+  })
+  summaryStatus?: string;
+
+  @Prop()
+  summaryErrorMessage?: string;
 }
 
 export const MediaFileSchema = SchemaFactory.createForClass(MediaFile);
