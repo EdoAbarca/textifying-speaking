@@ -71,18 +71,31 @@ ts-front/         # React frontend (JSX, not TypeScript)
     App.jsx       # Routes with ToastContainer & Navbar
     assets/       # Static resources
 ts-transcription/ # Python transcription service
-  app.py          # Flask app with Whisper model
+  app.py          # Flask app with Whisper model (lazy loading)
   requirements.txt # Python dependencies (flask, torch, transformers, accelerate)
   Dockerfile      # Python 3.11-slim with FFmpeg
   README.md       # Service documentation
 ts-summarization/ # Python summarization service
-  app.py          # Flask app with mT5 multilingual model
+  app.py          # Flask app with mT5 multilingual model (lazy loading)
   requirements.txt # Python dependencies (flask, torch, transformers, accelerate, sentencepiece)
   Dockerfile      # Python 3.11-slim
   README.md       # Service documentation
 docker-compose.yml # Orchestrates backend, frontend, transcription, summarization, MongoDB
 Makefile          # Development commands
 ```
+
+## GPU Memory Optimization
+
+Both AI services use **lazy loading** to handle GPU memory constraints:
+- **Strategy**: Models load on-demand (first request) instead of at service startup
+- **Transcription**: `get_pipeline()` function in `ts-transcription/app.py` loads Whisper model
+- **Summarization**: `get_summarizer()` function in `ts-summarization/app.py` loads mT5 model
+- **Benefits**: 
+  - Services start in seconds (no model loading delay)
+  - Lower idle memory consumption
+  - Both services coexist on same GPU without conflicts
+  - Faster container startup/restart times
+- **Verification**: Health endpoint includes `model_loaded: false` initially, then `true` after first request
 
 ## Development Workflow
 
@@ -801,3 +814,136 @@ curl -X POST http://localhost:3001/media/upload \
   - Summary and transcription displayed together in modal
   - Maintains data privacy through ownership validation
   - Purple theme distinguishes summarization from transcription (blue/indigo)
+
+### US-10: Background Real-time Summary Status ✅
+**NOTE**: US-10 is fully implemented within US-09. The background processing and real-time updates described in US-10 were architected and built as part of the US-09 implementation.
+
+- **Backend Architecture**:
+  - **BullMQ Job Queue Integration**:
+    - Redis 7.0 as message broker on port 6379
+    - Separate 'summarization' queue distinct from 'transcription' queue
+    - SummarizationProcessor worker with concurrency: 2
+    - Job retry strategy: up to 3 attempts with exponential backoff (5s delay)
+    - Automatic job cleanup on completion
+    - Failed jobs retained for debugging and monitoring
+  - **Async Processing Flow**:
+    - POST `/media/:id/summarize` enqueues job and returns immediately (non-blocking)
+    - Response format: `{ message: 'Summarization started', file: { id, summaryStatus } }`
+    - Background worker picks up job from queue
+    - Updates database and broadcasts WebSocket events during processing
+    - Status transitions: pending → processing → completed/error
+  - **Real-time WebSocket Broadcasts**:
+    - MediaGateway.emitSummaryStatusUpdate broadcasts to authenticated users
+    - User-scoped updates (only receive updates for own files)
+    - Event: 'summaryStatusUpdate'
+    - Payload includes: fileId, summaryStatus, summaryText?, summaryErrorMessage?, originalFilename?
+  - **Status Management**:
+    - `summaryStatus` field in MediaFile schema (pending, processing, completed, error)
+    - `summaryText` stores the generated summary
+    - `summaryErrorMessage` captures error details for user display
+    - Separate from transcription status (parallel processing support)
+  - **Error Handling & Recovery**:
+    - Service errors captured and stored in database
+    - WebSocket broadcasts of error status to user
+    - Automatic retries via BullMQ (3 attempts)
+    - Graceful degradation (failed jobs logged for debugging)
+  - **ConfigService Integration**:
+    - REDIS_HOST and REDIS_PORT environment variables
+    - SUMMARIZATION_SERVICE_URL for Python service communication
+    - Configurable timeouts and retry strategies
+
+- **Frontend Real-time Updates**:
+  - **FloatingProgressIndicator Component**:
+    - Shows all files currently processing (transcription AND summarization)
+    - Purple gradient theme for summarization (distinct from blue transcription)
+    - Displays: filename (truncated), progress indicator, file type icon
+    - Fixed bottom-right corner position (Google Drive style)
+    - Auto-hides when no files processing
+    - Maximum height with scroll for multiple files
+    - Filters files with `summaryStatus === 'processing'`
+  - **Dashboard Integration**:
+    - `summarizingFiles` Set tracks active summarization jobs
+    - `handleSummaryStatusUpdate` callback processes WebSocket events
+    - Automatic UI state updates without page refresh
+    - Status badges update in real-time with animated icons
+    - "Summarize" button disabled while processing (duplicate prevention)
+  - **Toast Notifications**:
+    - Rich content with icons and file names
+    - "Summarization started" (info, 3s auto-close, spinner icon)
+    - "Summarization completed" (success, 5s auto-close, checkmark icon)
+    - "Summarization failed" (error, 7s auto-close, alert icon with error message)
+    - Non-intrusive and dismissible
+  - **WebSocket Hook**:
+    - `useFileStatus` hook listens to 'summaryStatusUpdate' events
+    - Automatic connection/disconnection based on authentication
+    - JWT authentication for WebSocket handshake
+    - Reconnection logic (5 attempts with 1s delay)
+    - Console logging for debugging
+  - **User Experience**:
+    - User can navigate to any page while summarization runs
+    - Progress visible across all pages via floating indicator
+    - No page refresh required for status updates
+    - Multiple files can be summarized simultaneously
+    - Clear visual distinction between transcription and summarization
+
+- **Testing & Verification**:
+  - **Unit Tests**:
+    - SummarizationProcessor: 5 tests (success, errors, service failures)
+    - MediaService: 24 tests including summarizeFile method
+    - All tests passing (43/43 total)
+  - **E2E Tests**:
+    - POST `/media/:id/summarize`: 7 tests (auth, ownership, validation, errors)
+    - Tests verify async behavior (immediate return after job enqueue)
+  - **Manual Testing**:
+    - Upload file → transcribe → summarize workflow
+    - Multiple simultaneous summarizations
+    - Real-time progress indicator visibility
+    - Navigation during processing
+    - Error scenarios (service unavailable)
+    - WebSocket connection monitoring (browser DevTools)
+  - **Monitoring & Debugging**:
+    - Redis CLI commands to inspect job queues:
+      ```bash
+      make redis-cli
+      > KEYS *summarization*
+      > LLEN bull:summarization:waiting
+      > LLEN bull:summarization:active
+      > LLEN bull:summarization:completed
+      > LLEN bull:summarization:failed
+      ```
+    - Backend logs: `make logs-backend | grep SummarizationProcessor`
+    - Summarization service logs: `make logs-summarization`
+    - WebSocket events visible in browser console
+
+- **Infrastructure & Deployment**:
+  - **Docker Services**:
+    - Redis service: redis:7-alpine (container: ts-redis)
+    - Persistent storage with redis_data volume
+    - AOF (append-only file) persistence enabled
+    - Backend depends on Redis service
+  - **Makefile Commands**:
+    - `make logs-redis` - view Redis logs
+    - `make shell-redis` - access Redis container
+    - `make redis-cli` - Redis CLI access
+    - `make health` - includes Redis health check (PING command)
+  - **Environment Variables**:
+    - REDIS_HOST=redis
+    - REDIS_PORT=6379
+    - SUMMARIZATION_SERVICE_URL=http://summarization:5001
+
+- **Acceptance Criteria Verification**:
+  - ✅ Summarization process starts asynchronously (BullMQ job queue)
+  - ✅ User can continue using application while processing (non-blocking API)
+  - ✅ Real-time status shown in Google Drive-style progress spinner (FloatingProgressIndicator)
+  - ✅ Real-time updates via WebSocket (summaryStatusUpdate events)
+  - ✅ Toast notifications on completion/failure (rich content with icons)
+  - ✅ UI updates automatically without manual refresh (WebSocket integration)
+  - ✅ Duplicate job prevention (summarizingFiles Set, disabled button)
+
+- **Architecture Highlights**:
+  - Consistent with US-07 transcription background processing architecture
+  - Reuses existing WebSocket infrastructure (MediaGateway)
+  - Independent processing queues (transcription and summarization can run in parallel)
+  - Scalable design (configurable concurrency, horizontal scaling via Redis)
+  - Production-ready error handling and monitoring
+  - Complete separation of concerns (backend workers, frontend UI, Python service)
