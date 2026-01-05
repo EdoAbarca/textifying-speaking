@@ -71,18 +71,31 @@ ts-front/         # React frontend (JSX, not TypeScript)
     App.jsx       # Routes with ToastContainer & Navbar
     assets/       # Static resources
 ts-transcription/ # Python transcription service
-  app.py          # Flask app with Whisper model
+  app.py          # Flask app with Whisper model (lazy loading)
   requirements.txt # Python dependencies (flask, torch, transformers, accelerate)
   Dockerfile      # Python 3.11-slim with FFmpeg
   README.md       # Service documentation
 ts-summarization/ # Python summarization service
-  app.py          # Flask app with mT5 multilingual model
+  app.py          # Flask app with mT5 multilingual model (lazy loading)
   requirements.txt # Python dependencies (flask, torch, transformers, accelerate, sentencepiece)
   Dockerfile      # Python 3.11-slim
   README.md       # Service documentation
 docker-compose.yml # Orchestrates backend, frontend, transcription, summarization, MongoDB
 Makefile          # Development commands
 ```
+
+## GPU Memory Optimization
+
+Both AI services use **lazy loading** to handle GPU memory constraints:
+- **Strategy**: Models load on-demand (first request) instead of at service startup
+- **Transcription**: `get_pipeline()` function in `ts-transcription/app.py` loads Whisper model
+- **Summarization**: `get_summarizer()` function in `ts-summarization/app.py` loads mT5 model
+- **Benefits**: 
+  - Services start in seconds (no model loading delay)
+  - Lower idle memory consumption
+  - Both services coexist on same GPU without conflicts
+  - Faster container startup/restart times
+- **Verification**: Health endpoint includes `model_loaded: false` initially, then `true` after first request
 
 ## Development Workflow
 
@@ -801,3 +814,341 @@ curl -X POST http://localhost:3001/media/upload \
   - Summary and transcription displayed together in modal
   - Maintains data privacy through ownership validation
   - Purple theme distinguishes summarization from transcription (blue/indigo)
+
+### US-10: Background Real-time Summary Status ✅
+**NOTE**: US-10 is fully implemented within US-09. The background processing and real-time updates described in US-10 were architected and built as part of the US-09 implementation.
+
+- **Backend Architecture**:
+  - **BullMQ Job Queue Integration**:
+    - Redis 7.0 as message broker on port 6379
+    - Separate 'summarization' queue distinct from 'transcription' queue
+    - SummarizationProcessor worker with concurrency: 2
+    - Job retry strategy: up to 3 attempts with exponential backoff (5s delay)
+    - Automatic job cleanup on completion
+    - Failed jobs retained for debugging and monitoring
+  - **Async Processing Flow**:
+    - POST `/media/:id/summarize` enqueues job and returns immediately (non-blocking)
+    - Response format: `{ message: 'Summarization started', file: { id, summaryStatus } }`
+    - Background worker picks up job from queue
+    - Updates database and broadcasts WebSocket events during processing
+    - Status transitions: pending → processing → completed/error
+  - **Real-time WebSocket Broadcasts**:
+    - MediaGateway.emitSummaryStatusUpdate broadcasts to authenticated users
+    - User-scoped updates (only receive updates for own files)
+    - Event: 'summaryStatusUpdate'
+    - Payload includes: fileId, summaryStatus, summaryText?, summaryErrorMessage?, originalFilename?
+  - **Status Management**:
+    - `summaryStatus` field in MediaFile schema (pending, processing, completed, error)
+    - `summaryText` stores the generated summary
+    - `summaryErrorMessage` captures error details for user display
+    - Separate from transcription status (parallel processing support)
+  - **Error Handling & Recovery**:
+    - Service errors captured and stored in database
+    - WebSocket broadcasts of error status to user
+    - Automatic retries via BullMQ (3 attempts)
+    - Graceful degradation (failed jobs logged for debugging)
+  - **ConfigService Integration**:
+    - REDIS_HOST and REDIS_PORT environment variables
+    - SUMMARIZATION_SERVICE_URL for Python service communication
+    - Configurable timeouts and retry strategies
+
+- **Frontend Real-time Updates**:
+  - **FloatingProgressIndicator Component**:
+    - Shows all files currently processing (transcription AND summarization)
+    - Purple gradient theme for summarization (distinct from blue transcription)
+    - Displays: filename (truncated), progress indicator, file type icon
+    - Fixed bottom-right corner position (Google Drive style)
+    - Auto-hides when no files processing
+    - Maximum height with scroll for multiple files
+    - Filters files with `summaryStatus === 'processing'`
+  - **Dashboard Integration**:
+    - `summarizingFiles` Set tracks active summarization jobs
+    - `handleSummaryStatusUpdate` callback processes WebSocket events
+    - Automatic UI state updates without page refresh
+    - Status badges update in real-time with animated icons
+    - "Summarize" button disabled while processing (duplicate prevention)
+  - **Toast Notifications**:
+    - Rich content with icons and file names
+    - "Summarization started" (info, 3s auto-close, spinner icon)
+    - "Summarization completed" (success, 5s auto-close, checkmark icon)
+    - "Summarization failed" (error, 7s auto-close, alert icon with error message)
+    - Non-intrusive and dismissible
+  - **WebSocket Hook**:
+    - `useFileStatus` hook listens to 'summaryStatusUpdate' events
+    - Automatic connection/disconnection based on authentication
+    - JWT authentication for WebSocket handshake
+    - Reconnection logic (5 attempts with 1s delay)
+    - Console logging for debugging
+  - **User Experience**:
+    - User can navigate to any page while summarization runs
+    - Progress visible across all pages via floating indicator
+    - No page refresh required for status updates
+    - Multiple files can be summarized simultaneously
+    - Clear visual distinction between transcription and summarization
+
+- **Testing & Verification**:
+  - **Unit Tests**:
+    - SummarizationProcessor: 5 tests (success, errors, service failures)
+    - MediaService: 24 tests including summarizeFile method
+    - All tests passing (43/43 total)
+  - **E2E Tests**:
+    - POST `/media/:id/summarize`: 7 tests (auth, ownership, validation, errors)
+    - Tests verify async behavior (immediate return after job enqueue)
+  - **Manual Testing**:
+    - Upload file → transcribe → summarize workflow
+    - Multiple simultaneous summarizations
+    - Real-time progress indicator visibility
+    - Navigation during processing
+    - Error scenarios (service unavailable)
+    - WebSocket connection monitoring (browser DevTools)
+  - **Monitoring & Debugging**:
+    - Redis CLI commands to inspect job queues:
+      ```bash
+      make redis-cli
+      > KEYS *summarization*
+      > LLEN bull:summarization:waiting
+      > LLEN bull:summarization:active
+      > LLEN bull:summarization:completed
+      > LLEN bull:summarization:failed
+      ```
+    - Backend logs: `make logs-backend | grep SummarizationProcessor`
+    - Summarization service logs: `make logs-summarization`
+    - WebSocket events visible in browser console
+
+- **Infrastructure & Deployment**:
+  - **Docker Services**:
+    - Redis service: redis:7-alpine (container: ts-redis)
+    - Persistent storage with redis_data volume
+    - AOF (append-only file) persistence enabled
+    - Backend depends on Redis service
+  - **Makefile Commands**:
+    - `make logs-redis` - view Redis logs
+    - `make shell-redis` - access Redis container
+    - `make redis-cli` - Redis CLI access
+    - `make health` - includes Redis health check (PING command)
+  - **Environment Variables**:
+    - REDIS_HOST=redis
+    - REDIS_PORT=6379
+    - SUMMARIZATION_SERVICE_URL=http://summarization:5001
+
+- **Acceptance Criteria Verification**:
+  - ✅ Summarization process starts asynchronously (BullMQ job queue)
+  - ✅ User can continue using application while processing (non-blocking API)
+  - ✅ Real-time status shown in Google Drive-style progress spinner (FloatingProgressIndicator)
+  - ✅ Real-time updates via WebSocket (summaryStatusUpdate events)
+  - ✅ Toast notifications on completion/failure (rich content with icons)
+  - ✅ UI updates automatically without manual refresh (WebSocket integration)
+  - ✅ Duplicate job prevention (summarizingFiles Set, disabled button)
+
+- **Architecture Highlights**:
+  - Consistent with US-07 transcription background processing architecture
+  - Reuses existing WebSocket infrastructure (MediaGateway)
+  - Independent processing queues (transcription and summarization can run in parallel)
+  - Scalable design (configurable concurrency, horizontal scaling via Redis)
+  - Production-ready error handling and monitoring
+  - Complete separation of concerns (backend workers, frontend UI, Python service)
+### US-11: See Summary Alongside Transcription ✅
+- **Overview**:
+  - Enhanced modal interface displaying transcription and summary side-by-side
+  - Single unified view for comparing full text with AI-generated summary
+  - Real-time updates when summary becomes available during viewing
+  - Status-aware display for pending, processing, completed, and error states
+
+- **Backend Implementation**:
+  - **API Endpoint Enhancement**:
+    - GET `/media/:id/transcription` returns both transcription and summary data
+    - Response includes new fields: `summaryText`, `summaryStatus`, `summaryErrorMessage`
+    - Backward compatible (fields are optional, only present when applicable)
+  - **MediaService.getTranscription Updates**:
+    ```typescript
+    async getTranscription(id: string): Promise<{
+      status: string;
+      transcription?: string;
+      progress?: number;
+      message?: string;
+      fileId?: string;
+      originalFilename?: string;
+      summaryText?: string;           // NEW
+      summaryStatus?: string;          // NEW
+      summaryErrorMessage?: string;    // NEW
+    }>
+    ```
+  - **Response Structure**:
+    - For completed files with summary:
+      ```json
+      {
+        "status": "completed",
+        "transcription": "Full text...",
+        "fileId": "...",
+        "originalFilename": "...",
+        "summaryText": "AI summary...",
+        "summaryStatus": "completed"
+      }
+      ```
+    - For files with pending/processing/error summary:
+      ```json
+      {
+        "status": "completed",
+        "transcription": "Full text...",
+        "summaryStatus": "pending" | "processing" | "error",
+        "summaryErrorMessage": "Error details..." // Only for error state
+      }
+      ```
+  - **MediaController.getFiles Enhancement**:
+    - GET `/media` endpoint updated to include summary fields
+    - Ensures Dashboard has all data needed for side-by-side view
+    - Fields added: `summaryText`, `summaryStatus`, `summaryErrorMessage`
+  - **Unit Tests**:
+    - 5 new test cases for getTranscription with summary scenarios:
+      - Completed file without summary
+      - Completed file with completed summary
+      - Completed file with pending summary
+      - Completed file with processing summary
+      - Completed file with summary error
+    - Total: 12 getTranscription tests (7 original + 5 new)
+    - All tests passing
+  - **E2E Tests**:
+    - 5 new E2E test cases for GET `/media/:id/transcription`:
+      - Transcription with completed summary
+      - Transcription with pending summary
+      - Transcription with processing summary
+      - Transcription with summary error
+      - Transcription without summary
+    - Total: 12 E2E tests for transcription endpoint
+    - All tests use MongoDB direct updates for accurate state simulation
+    - Test isolation with unique timestamps
+
+- **Frontend Implementation**:
+  - **Enhanced Transcription Modal**:
+    - Side-by-side layout with two panels:
+      - **Left Panel (Indigo Theme)**: Full transcription
+      - **Right Panel (Purple Theme)**: AI-generated summary
+    - Grid layout: `grid-cols-1 lg:grid-cols-2`
+    - Each panel independently scrollable with max height (60vh)
+    - Copy-to-clipboard buttons for both sections
+  - **Summary Status Display**:
+    - **Completed**: Shows summary text with copy button
+    - **Processing**: Animated spinner with message "Summary in progress..."
+    - **Pending**: Clock icon with prompt "Click Summarize button to generate a summary"
+    - **Error**: Alert icon with error message details
+    - **Not started**: Placeholder with instructions
+  - **Modal Structure**:
+    ```jsx
+    <div className="fixed inset-0 ... z-50">
+      <div className="bg-white ... max-w-7xl ... max-h-[90vh] flex flex-col">
+        {/* Header with title and close button */}
+        <div className="flex-shrink-0 ... border-b">...</div>
+        
+        {/* Side-by-side content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Transcription Panel */}
+            <div className="bg-indigo-50 ...">...</div>
+            
+            {/* Summary Panel */}
+            <div className="bg-purple-50 ...">...</div>
+          </div>
+        </div>
+        
+        {/* Footer with close button */}
+        <div className="flex-shrink-0 ... border-t">...</div>
+      </div>
+    </div>
+    ```
+  - **Real-time Updates**:
+    - Existing WebSocket integration (`handleSummaryStatusUpdate`) automatically updates modal
+    - `selectedFile` state updates when summary status changes
+    - No additional WebSocket listeners required (reuses existing infrastructure)
+    - Modal content updates without closing/reopening
+  - **User Experience**:
+    - Smooth transitions between summary states
+    - Clear visual distinction (indigo vs purple themes)
+    - Responsive design (side-by-side on desktop, stacked on mobile)
+    - Independent scrolling for long texts
+    - Consistent with existing UI patterns
+    - Toast notifications on summary completion while modal is open
+  - **UI Icons**:
+    - Transcription: `mdi:text-box-outline` (indigo)
+    - Summary: `mdi:file-document-outline` (purple)
+    - Processing: `mdi:cog` (animated spin)
+    - Pending: `mdi:clock-outline`
+    - Error: `mdi:alert-circle`
+    - Copy: `mdi:content-copy`
+    - Close: `mdi:close`
+
+- **Integration Points**:
+  - **Dashboard**:
+    - "View Text" button opens enhanced modal (replaces old transcription-only modal)
+    - Button available for completed files with `transcribedText`
+    - Modal fetches all data from `selectedFile` state
+  - **WebSocket Events**:
+    - `summaryStatusUpdate` event updates `selectedFile` via `handleSummaryStatusUpdate`
+    - Modal automatically reflects changes without manual refresh
+    - Real-time synchronization with backend state
+  - **GET `/media` Endpoint**:
+    - Returns summary fields along with file metadata
+    - Dashboard always has latest summary data
+    - No separate API call needed for summary status
+
+- **Testing**:
+  - **Backend**:
+    - Unit tests: 28 passed (MediaService with getTranscription enhancements)
+    - E2E tests: 12 passed (media-transcription-get.e2e-spec.ts)
+    - Test command: `JWT_SECRET=test-secret-key npm run test:e2e`
+  - **Manual Testing Workflow**:
+    1. Start services: `docker compose up --build -d`
+    2. Register/login at http://localhost:5173
+    3. Upload audio/video file
+    4. Transcribe file (wait for completion)
+    5. Click "View Text" button → Modal shows transcription with "No summary" state
+    6. Close modal, click "Summarize" button
+    7. Click "View Text" again → Modal shows "Processing" state with spinner
+    8. Wait for completion → Modal automatically updates with summary
+    9. Verify both panels display correctly side-by-side
+    10. Test copy-to-clipboard for both sections
+    11. Verify error state by stopping summarization service
+  - **Browser Testing**:
+    - Responsive layout on different screen sizes
+    - WebSocket real-time updates while modal is open
+    - Toast notifications appear correctly
+    - No console errors
+
+- **Documentation**:
+  - **README.md**:
+    - Feature description in "View Summary Alongside Transcription (US-11)" section
+    - API endpoint documentation with all response formats
+    - Status-aware display examples
+    - Use cases and best practices
+  - **.github/copilot-instructions.md**:
+    - Complete implementation details
+    - Code structure and patterns
+    - Testing instructions
+    - Integration with existing features
+
+- **Acceptance Criteria Verification**:
+  - ✅ User can open file from dashboard ("View Text" button)
+  - ✅ Full transcription displayed in readable format (left panel, indigo theme)
+  - ✅ Summary displayed adjacent to full text (right panel, purple theme, side-by-side)
+  - ✅ Only file owner can view (JWT authentication + ownership validation)
+  - ✅ Summary pending state shows appropriate message (clock icon with prompt)
+  - ✅ Summary error displays error message (alert icon with details)
+  - ✅ Easy scrolling and navigation (independent scroll for each panel)
+  - ✅ Updates dynamically when summary becomes ready (WebSocket integration)
+
+- **API Changes Summary**:
+  - **GET `/media/:id/transcription`**:
+    - Added fields: `summaryText?`, `summaryStatus?`, `summaryErrorMessage?`
+    - Backward compatible (optional fields)
+    - Returns summary data when available
+  - **GET `/media`**:
+    - Added fields to file response: `summaryText`, `summaryStatus`, `summaryErrorMessage`
+    - Dashboard has all data for side-by-side view
+  - **No Breaking Changes**: Existing functionality preserved
+
+- **Architecture Benefits**:
+  - Single source of truth (GET `/media/:id/transcription` returns both)
+  - Reduced API calls (no separate endpoint for summary)
+  - Consistent with US-08 (transcription viewing) architecture
+  - Reuses existing WebSocket infrastructure (no new events)
+  - Maintains separation of concerns (transcription vs summarization status)
+  - Scalable for future enhancements (e.g., highlighting, diff view)

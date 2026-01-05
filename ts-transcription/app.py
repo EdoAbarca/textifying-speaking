@@ -14,46 +14,63 @@ from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 app = Flask(__name__)
 
 '''
-3 notes on the current implementation:
-1. The Whisper model is loaded once at startup and kept in memory, but should be loaded using an in-demand strategy for serverless deployments.
-2. Given that the medium model performed the best in speed and accuracy terms, it was selected as the default model. For better GPUs (3060 Ti and above, >4 GiB), "openai/whisper-large-v2" should be preferred.
+Implementation notes:
+1. The Whisper model is loaded on-demand (lazy loading) to optimize GPU memory usage.
+   This allows running multiple AI services on the same GPU without memory conflicts.
+2. Given that the medium model performed the best in speed and accuracy terms, it was selected as the default model. 
+   For better GPUs (3060 Ti and above, >4 GiB), "openai/whisper-large-v2" should be preferred.
 3. Whisper was the only model tested here. For other models, the pipeline and processing logic might need adjustments.
-
 '''
 
-# Initialize Whisper model on startup
+# Model configuration
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-
 model_id = "openai/whisper-medium"
 
-print(f"Loading Whisper model on device: {device}")
+# Global variable to cache the pipeline after first load
+_pipe = None
 
-model = AutoModelForSpeechSeq2Seq.from_pretrained(
-    model_id, 
-    torch_dtype=torch_dtype, 
-    low_cpu_mem_usage=True, 
-    use_safetensors=True,
-    device_map="auto"
-)
+print(f"Transcription service initialized. Model will be loaded on first request.")
+print(f"Device: {device}, Model: {model_id}")
 
-processor = AutoProcessor.from_pretrained(model_id)
 
-# Create pipeline without batch_size to avoid batching issues
-pipe = pipeline(
-    "automatic-speech-recognition",
-    model=model,
-    tokenizer=processor.tokenizer,
-    feature_extractor=processor.feature_extractor,
-    max_new_tokens=128,
-    chunk_length_s=30,
-    return_timestamps=False,
-    torch_dtype=torch_dtype,
-    # Note: device parameter removed because model uses device_map="auto"
-    generate_kwargs={"task": "transcribe", "language": "english"},
-)
-
-print("Whisper model loaded successfully")
+def get_pipeline():
+    """
+    Lazy load the Whisper pipeline on first request.
+    Subsequent calls return the cached pipeline.
+    """
+    global _pipe
+    
+    if _pipe is None:
+        print(f"Loading Whisper model on device: {device}")
+        
+        model = AutoModelForSpeechSeq2Seq.from_pretrained(
+            model_id, 
+            torch_dtype=torch_dtype, 
+            low_cpu_mem_usage=True, 
+            use_safetensors=True,
+            device_map="auto"
+        )
+        
+        processor = AutoProcessor.from_pretrained(model_id)
+        
+        # Create pipeline without batch_size to avoid batching issues
+        _pipe = pipeline(
+            "automatic-speech-recognition",
+            model=model,
+            tokenizer=processor.tokenizer,
+            feature_extractor=processor.feature_extractor,
+            max_new_tokens=128,
+            chunk_length_s=30,
+            return_timestamps=False,
+            torch_dtype=torch_dtype,
+            # Note: device parameter removed because model uses device_map="auto"
+            generate_kwargs={"task": "transcribe", "language": "english"},
+        )
+        
+        print("Whisper model loaded successfully")
+    
+    return _pipe
 
 
 def extract_audio_from_video(video_path, output_path):
@@ -97,7 +114,12 @@ def extract_audio_from_video(video_path, output_path):
 @app.route('/health', methods=['GET'])
 def health():
     """Health check endpoint."""
-    return jsonify({"status": "healthy", "model": model_id, "device": device}), 200
+    return jsonify({
+        "status": "healthy", 
+        "model": model_id, 
+        "device": device,
+        "model_loaded": _pipe is not None
+    }), 200
 
 
 @app.route('/transcribe', methods=['POST'])
@@ -163,6 +185,9 @@ def transcribe():
         
         # Perform transcription
         app.logger.info("Starting transcription...")
+        
+        # Get pipeline (lazy loads on first call)
+        pipe = get_pipeline()
         
         # Use the pipeline directly - it handles batching internally
         result = pipe(

@@ -734,13 +734,14 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Transcription Text Modal */}
+      {/* Transcription and Summary Modal (Side-by-Side View) */}
       {showTranscriptionModal && selectedFile && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+          <div className="bg-white rounded-lg shadow-xl max-w-7xl w-full max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between rounded-t-lg">
               <div>
-                <h2 className="text-2xl font-bold text-gray-800">Transcribed Text</h2>
+                <h2 className="text-2xl font-bold text-gray-800">Transcription & Summary</h2>
                 <p className="text-sm text-gray-500 mt-1">{selectedFile.originalFilename}</p>
               </div>
               <button
@@ -751,47 +752,118 @@ export default function Dashboard() {
               </button>
             </div>
 
-            <div className="p-6">
-              <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Icon icon="mdi:text-box-check-outline" width={24} className="text-green-500" />
-                    <span className="text-sm font-medium text-gray-700">Transcription Result</span>
+            {/* Content - Side by Side */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Transcription Section */}
+                <div className="bg-indigo-50 rounded-lg p-6 border border-indigo-200 flex flex-col">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Icon icon="mdi:text-box-outline" width={24} className="text-indigo-500" />
+                      <span className="text-lg font-semibold text-gray-800">Full Transcription</span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(selectedFile.transcribedText || '');
+                        toast.success('Transcription copied to clipboard!');
+                      }}
+                      className="flex items-center gap-2 px-3 py-1 bg-indigo-500 text-white text-sm rounded-lg hover:bg-indigo-600 transition-colors"
+                    >
+                      <Icon icon="mdi:content-copy" width={16} />
+                      Copy
+                    </button>
                   </div>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(selectedFile.transcribedText || '');
-                      toast.success('Transcription copied to clipboard!');
-                    }}
-                    className="flex items-center gap-2 px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors"
-                  >
-                    <Icon icon="mdi:content-copy" width={16} />
-                    Copy
-                  </button>
+                  
+                  {selectedFile.transcribedText ? (
+                    <div className="bg-white rounded-lg p-4 border border-indigo-200 flex-1 overflow-y-auto max-h-[60vh]">
+                      <p className="text-gray-800 whitespace-pre-wrap leading-relaxed">
+                        {selectedFile.transcribedText}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="bg-white rounded-lg p-4 border border-indigo-200 flex-1 flex items-center justify-center">
+                      <div className="text-center">
+                        <Icon icon="mdi:text-box-remove-outline" width={48} className="text-gray-400 mx-auto mb-2" />
+                        <p className="text-gray-500">No transcription text available</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                
-                {selectedFile.transcribedText ? (
-                  <div className="bg-white rounded-lg p-4 border border-gray-200">
-                    <p className="text-gray-800 whitespace-pre-wrap leading-relaxed">
-                      {selectedFile.transcribedText}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <Icon icon="mdi:text-box-remove-outline" width={48} className="text-gray-400 mx-auto mb-2" />
-                    <p className="text-gray-500">No transcription text available</p>
-                  </div>
-                )}
-              </div>
 
-              <div className="mt-6 pt-6 border-t border-gray-200 flex justify-end">
-                <button
-                  onClick={() => setShowTranscriptionModal(false)}
-                  className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
-                >
-                  Close
-                </button>
+                {/* Summary Section */}
+                <div className="bg-purple-50 rounded-lg p-6 border border-purple-200 flex flex-col">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Icon icon="mdi:file-document-outline" width={24} className="text-purple-500" />
+                      <span className="text-lg font-semibold text-gray-800">Summary</span>
+                    </div>
+                    {selectedFile.summaryText && (
+                      <button
+                        onClick={handleCopySummaryToClipboard}
+                        className="flex items-center gap-2 px-3 py-1 bg-purple-500 text-white text-sm rounded-lg hover:bg-purple-600 transition-colors"
+                      >
+                        <Icon icon="mdi:content-copy" width={16} />
+                        Copy
+                      </button>
+                    )}
+                  </div>
+                  
+                  {/* Summary Content with Status Handling */}
+                  {selectedFile.summaryText ? (
+                    <div className="bg-white rounded-lg p-4 border border-purple-200 flex-1 overflow-y-auto max-h-[60vh]">
+                      <p className="text-gray-800 whitespace-pre-wrap leading-relaxed">
+                        {selectedFile.summaryText}
+                      </p>
+                    </div>
+                  ) : selectedFile.summaryStatus === 'processing' ? (
+                    <div className="bg-white rounded-lg p-4 border border-purple-200 flex-1 flex items-center justify-center">
+                      <div className="text-center">
+                        <Icon icon="mdi:cog" width={48} className="text-purple-500 mx-auto mb-3 animate-spin" />
+                        <p className="text-gray-700 font-medium mb-1">Summary in progress...</p>
+                        <p className="text-gray-500 text-sm">This page will update automatically when ready</p>
+                      </div>
+                    </div>
+                  ) : selectedFile.summaryStatus === 'pending' ? (
+                    <div className="bg-white rounded-lg p-4 border border-purple-200 flex-1 flex items-center justify-center">
+                      <div className="text-center">
+                        <Icon icon="mdi:clock-outline" width={48} className="text-purple-400 mx-auto mb-3" />
+                        <p className="text-gray-700 font-medium mb-1">Summary pending</p>
+                        <p className="text-gray-500 text-sm">Click "Summarize" button to generate a summary</p>
+                      </div>
+                    </div>
+                  ) : selectedFile.summaryStatus === 'error' ? (
+                    <div className="bg-white rounded-lg p-4 border border-red-200 flex-1 flex items-center justify-center">
+                      <div className="text-center">
+                        <Icon icon="mdi:alert-circle" width={48} className="text-red-500 mx-auto mb-3" />
+                        <p className="text-gray-700 font-medium mb-1">Summarization failed</p>
+                        {selectedFile.summaryErrorMessage && (
+                          <p className="text-red-600 text-sm mt-2 px-4">
+                            {selectedFile.summaryErrorMessage}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-white rounded-lg p-4 border border-purple-200 flex-1 flex items-center justify-center">
+                      <div className="text-center">
+                        <Icon icon="mdi:file-document-remove-outline" width={48} className="text-gray-400 mx-auto mb-3" />
+                        <p className="text-gray-500">No summary available yet</p>
+                        <p className="text-gray-400 text-sm mt-1">Generate a summary from the dashboard</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex-shrink-0 border-t border-gray-200 px-6 py-4 flex justify-end rounded-b-lg bg-white">
+              <button
+                onClick={() => setShowTranscriptionModal(false)}
+                className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

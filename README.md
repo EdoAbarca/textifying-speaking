@@ -163,6 +163,87 @@
     - summaryStatusUpdate broadcasts to user when status changes
     - Automatic UI synchronization without page refresh
 
+- **Background Real-time Summary Status (US-10)**: Process summarizations asynchronously with real-time feedback
+  - BullMQ job queue for background summarization processing
+  - Redis as message broker for distributed job queue
+  - Non-blocking summarization (returns immediately after job enqueue)
+  - Background worker processes jobs with configurable concurrency (2 jobs simultaneously)
+  - Automatic retry mechanism (up to 3 attempts with exponential backoff)
+  - Real-time status updates via WebSocket broadcasts to authenticated users
+  - Google Drive-style floating progress indicator in UI:
+    - Shows all files currently processing (transcription and summarization)
+    - Purple gradient theme for summarization progress
+    - Real-time progress updates
+    - Auto-hides when no files processing
+    - Multiple files displayed with scroll support
+  - Enhanced toast notifications with rich content:
+    - Summarization started (info with spinner icon)
+    - Summarization completed (success with checkmark)
+    - Summarization failed (error with details and error message)
+  - User can navigate freely while summarization runs in background
+  - Failed jobs retained for debugging and monitoring
+  - Dashboard updates automatically without page refresh
+  - Duplicate job prevention (cannot start multiple summarizations for same file)
+  - Scalable architecture for handling multiple concurrent summarizations
+  - Independent from transcription processing (parallel processing support)
+  - Status management via summaryStatus field (pending, processing, completed, error)
+  - Error messages captured and displayed to users
+  - Complete integration with existing real-time update infrastructure
+
+- **View Summary Alongside Transcription (US-11)**: Compare and review transcription with summary side-by-side
+  - Enhanced modal dialog with side-by-side layout for transcription and summary
+  - GET `/media/:id/transcription` endpoint returns both transcription and summary data
+  - Side-by-side comparison view:
+    - Left panel: Full transcription with indigo theme
+    - Right panel: AI-generated summary with purple theme
+    - Independent scrolling for each panel
+    - Copy-to-clipboard buttons for both transcription and summary
+  - Status-aware summary display:
+    - **Completed**: Shows generated summary with copy functionality
+    - **Processing**: Animated spinner with "Summary in progress..." message
+    - **Pending**: Clock icon with suggestion to click "Summarize" button
+    - **Error**: Alert icon with error message details
+    - **Not started**: Placeholder with instructions to generate summary
+  - Real-time updates when summary becomes ready:
+    - WebSocket integration automatically updates modal
+    - No page refresh required
+    - Toast notifications on status changes
+    - Smooth UI transitions between states
+  - Enhanced API response format:
+    ```json
+    {
+      "status": "completed",
+      "transcription": "Full transcribed text...",
+      "summaryText": "AI-generated summary...",
+      "summaryStatus": "completed",
+      "fileId": "...",
+      "originalFilename": "..."
+    }
+    ```
+  - Responsive design:
+    - Desktop: Two-column side-by-side layout
+    - Tablet/Mobile: Single-column stacked layout (future enhancement)
+    - Maximum viewport height (90vh) with scrollable content
+  - File ownership validation (403 if unauthorized)
+  - Integrated with existing Dashboard:
+    - "View Text" button opens new side-by-side modal
+    - Summary modal deprecated in favor of unified view
+    - Consistent styling with existing UI components
+  - Enhanced user experience:
+    - Clear visual distinction between transcription and summary
+    - Status indicators prevent confusion about summary availability
+    - Automatic updates keep displayed content synchronized
+    - File metadata displayed in modal header
+  - Supports all transcription/summary states:
+    - File not yet transcribed: Shows appropriate message
+    - Transcription in progress: Displays progress information
+    - Transcription completed, summary not started: Shows transcription with prompt to summarize
+    - Both completed: Full side-by-side comparison view
+  - Performance optimized:
+    - Lazy loading of summary text
+    - Efficient WebSocket message handling
+    - Minimal re-renders on status updates
+
 
 ## Tech Stack
 
@@ -186,6 +267,7 @@
 - **ML Libraries**: PyTorch, Transformers, Accelerate
 - **Audio Processing**: FFmpeg
 - **Container**: Python 3.11-slim Docker image
+- **Optimization**: Lazy loading (model loads on first request)
 
 ### Summarization Service
 - **Language**: Python 3.11
@@ -193,6 +275,15 @@
 - **AI Model**: mT5_multilingual_XLSum via HuggingFace Transformers (45+ languages)
 - **ML Libraries**: PyTorch, Transformers, Accelerate, SentencePiece
 - **Container**: Python 3.11-slim Docker image
+- **Optimization**: Lazy loading (model loads on first request)
+
+### GPU Memory Optimization
+Both AI services use **lazy loading** to optimize GPU memory usage:
+- Models load on-demand (on first request) rather than at service startup
+- Services start in seconds without loading heavy AI models
+- Both services can coexist on same GPU without memory conflicts
+- Health endpoint includes `model_loaded` field to verify model status
+- Implementation: `get_pipeline()` in transcription, `get_summarizer()` in summarization
 
 ### Frontend
 - **Framework**: React 19 + Vite 7
@@ -578,7 +669,7 @@ curl -X POST http://localhost:3001/media/507f1f77bcf86cd799439011/transcribe \
 - Automatic chunking for long audio (30-second chunks)
 
 #### GET `/media/:id/transcription`
-Retrieve the transcription text for a transcribed file.
+Retrieve the transcription text and summary (if available) for a transcribed file.
 
 **Authentication:** Required (Bearer JWT token)
 
@@ -591,13 +682,49 @@ curl -X GET http://localhost:3001/media/507f1f77bcf86cd799439011/transcription \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
-**Success Response (200) - Completed File:**
+**Success Response (200) - Completed File with Summary:**
 ```json
 {
   "status": "completed",
   "transcription": "This is the transcribed text from the audio file...",
   "fileId": "507f1f77bcf86cd799439011",
-  "originalFilename": "audio.mp3"
+  "originalFilename": "audio.mp3",
+  "summaryText": "AI-generated summary of the transcription...",
+  "summaryStatus": "completed"
+}
+```
+
+**Success Response (200) - Completed File with Pending Summary:**
+```json
+{
+  "status": "completed",
+  "transcription": "This is the transcribed text from the audio file...",
+  "fileId": "507f1f77bcf86cd799439011",
+  "originalFilename": "audio.mp3",
+  "summaryStatus": "pending"
+}
+```
+
+**Success Response (200) - Completed File with Processing Summary:**
+```json
+{
+  "status": "completed",
+  "transcription": "This is the transcribed text from the audio file...",
+  "fileId": "507f1f77bcf86cd799439011",
+  "originalFilename": "audio.mp3",
+  "summaryStatus": "processing"
+}
+```
+
+**Success Response (200) - Completed File with Summary Error:**
+```json
+{
+  "status": "completed",
+  "transcription": "This is the transcribed text from the audio file...",
+  "fileId": "507f1f77bcf86cd799439011",
+  "originalFilename": "audio.mp3",
+  "summaryStatus": "error",
+  "summaryErrorMessage": "Summarization service unavailable"
 }
 ```
 
@@ -635,22 +762,27 @@ curl -X GET http://localhost:3001/media/507f1f77bcf86cd799439011/transcription \
 **Behavior:**
 - Validates file ownership before returning transcription
 - Returns different responses based on file status:
-  - `completed`: Returns full transcription text with file metadata
+  - `completed`: Returns full transcription text with file metadata and summary data (if available)
   - `processing`: Returns progress percentage and status message
   - `error`: Returns error message from failed transcription
   - `ready`/`uploading`: Returns message indicating transcription hasn't started
-- Only the file owner can retrieve transcription (enforces data privacy)
+- Summary fields included in response when transcription is completed:
+  - `summaryText`: The generated summary (only if summaryStatus is 'completed')
+  - `summaryStatus`: Current status of summarization (pending, processing, completed, error, or undefined)
+  - `summaryErrorMessage`: Error details if summarization failed
+- Only the file owner can retrieve transcription and summary (enforces data privacy)
 
 **Use Cases:**
-- Display transcribed text in UI after completion
-- Check transcription status without fetching full file details
-- Implement "View Transcription" feature in frontend
+- Display transcribed text and summary side-by-side in UI after completion
+- Check transcription and summary status without fetching full file details
+- Implement "View Transcription & Summary" feature in frontend (US-11)
 - Poll for completion status (though WebSockets are preferred for real-time updates)
 
 **Best Practices:**
 - Use WebSocket events for real-time status updates instead of polling this endpoint
-- This endpoint is ideal for retrieving transcription after page reload or direct navigation
+- This endpoint is ideal for retrieving transcription and summary after page reload or direct navigation
 - Handle all status responses gracefully in UI (show spinner for processing, error message for errors, etc.)
+- Display summary status indicators (pending, processing, completed, error) when showing transcription
 
 
 ## Project Structure
@@ -823,6 +955,85 @@ curl -X GET http://localhost:3001/media \
 8. Click 'View Summary' button to see modal with summary and transcription
 9. Test copy-to-clipboard buttons in modal
 10. Verify real-time updates work (status badges update automatically)
+
+### US-10 Testing
+
+US-10 testing is integrated into US-09 tests since US-10 represents the background real-time aspects already implemented in US-09.
+
+**Automated Tests:**
+```bash
+# Run backend unit tests (includes SummarizationProcessor tests)
+make test-backend
+
+# Run all E2E tests
+make test-backend-e2e
+```
+
+**Test Coverage:**
+- ✅ BullMQ job queue integration (SummarizationProcessor)
+- ✅ Background job processing with concurrency control
+- ✅ Automatic retry mechanism with exponential backoff
+- ✅ WebSocket real-time status broadcasts
+- ✅ Error handling and recovery
+- ✅ Multiple simultaneous job processing
+- ✅ Job completion and failure scenarios
+
+**Manual Real-Time Testing:**
+1. Start all services: `make quickstart`
+2. Open browser at http://localhost:5173
+3. Register/login as user
+4. Upload multiple audio/video files
+5. Start transcription on multiple files simultaneously
+6. Observe floating progress indicator showing all processing files
+7. Navigate to different pages - progress continues in background
+8. After transcriptions complete, start summarization on multiple files
+9. Observe:
+   - Purple gradient progress indicator for summarization
+   - Real-time toast notifications (started, completed, failed)
+   - Dashboard status badges update automatically
+   - User can continue browsing while processing occurs
+10. Verify summarization completes successfully
+11. Click "View Summary" to see generated summary
+12. Test error handling by stopping summarization service:
+    ```bash
+    docker stop ts-summarization
+    # Try to summarize a file - should show error toast
+    docker start ts-summarization
+    ```
+
+**WebSocket Event Testing:**
+```bash
+# Monitor WebSocket events in browser console:
+# 1. Open browser DevTools → Console
+# 2. Look for "Summary status update received:" messages
+# 3. Verify events contain: fileId, summaryStatus, summaryText, summaryErrorMessage
+
+# Manual WebSocket connection test:
+TOKEN=$(curl -s -X POST http://localhost:3001/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"test@example.com","password":"password123"}' \
+  | jq -r '.accessToken')
+
+# Connect via Socket.IO client and listen to 'summaryStatusUpdate' events
+```
+
+**Background Processing Verification:**
+```bash
+# Check Redis for queued jobs
+make redis-cli
+> KEYS *summarization*
+> LLEN bull:summarization:waiting
+> LLEN bull:summarization:active
+> LLEN bull:summarization:completed
+> LLEN bull:summarization:failed
+> exit
+
+# Check summarization service logs
+make logs-summarization
+
+# Check backend processor logs
+make logs-backend | grep SummarizationProcessor
+```
 
 
 ## Environment Variables

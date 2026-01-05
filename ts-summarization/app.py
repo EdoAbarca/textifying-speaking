@@ -10,23 +10,46 @@ from transformers import pipeline
 
 app = Flask(__name__)
 
-# Initialize summarization model on startup
+'''
+Implementation notes:
+1. The mT5 model is loaded on-demand (lazy loading) to optimize GPU memory usage.
+   This allows running multiple AI services on the same GPU without memory conflicts.
+2. mT5_multilingual_XLSum supports 45+ languages for comprehensive international coverage.
+'''
+
+# Model configuration
 device = 0 if torch.cuda.is_available() else -1
 torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-
 model_id = "csebuetnlp/mT5_multilingual_XLSum"
 
-print(f"Loading summarization model on device: {'cuda' if device == 0 else 'cpu'}")
+# Global variable to cache the summarizer after first load
+_summarizer = None
 
-# Create summarization pipeline
-summarizer = pipeline(
-    "summarization",
-    model=model_id,
-    torch_dtype=torch_dtype,
-    device=device,
-)
+print(f"Summarization service initialized. Model will be loaded on first request.")
+print(f"Device: {'cuda' if device == 0 else 'cpu'}, Model: {model_id}")
 
-print("Summarization model loaded successfully")
+
+def get_summarizer():
+    """
+    Lazy load the summarization pipeline on first request.
+    Subsequent calls return the cached pipeline.
+    """
+    global _summarizer
+    
+    if _summarizer is None:
+        print(f"Loading summarization model on device: {'cuda' if device == 0 else 'cpu'}")
+        
+        # Create summarization pipeline
+        _summarizer = pipeline(
+            "summarization",
+            model=model_id,
+            torch_dtype=torch_dtype,
+            device=device,
+        )
+        
+        print("Summarization model loaded successfully")
+    
+    return _summarizer
 
 
 @app.route('/health', methods=['GET'])
@@ -35,7 +58,8 @@ def health():
     return jsonify({
         "status": "healthy",
         "model": model_id,
-        "device": "cuda" if device == 0 else "cpu"
+        "device": "cuda" if device == 0 else "cpu",
+        "model_loaded": _summarizer is not None
     }), 200
 
 
@@ -66,6 +90,9 @@ def summarize():
             return jsonify({"error": "Empty text"}), 400
         
         app.logger.info(f"Received text for summarization: {len(text)} characters")
+        
+        # Get summarizer (lazy loads on first call)
+        summarizer = get_summarizer()
         
         # Perform summarization
         # mT5 supports multilingual text and works with various input lengths

@@ -211,6 +211,138 @@ describe('MediaController - GET /media/:id/transcription (e2e)', () => {
           expect(res.body).toHaveProperty('transcription', transcribedText);
           expect(res.body).toHaveProperty('fileId', fileId);
           expect(res.body).toHaveProperty('originalFilename');
+          expect(res.body).not.toHaveProperty('summaryText');
+          expect(res.body).not.toHaveProperty('summaryStatus');
+          expect(res.body).not.toHaveProperty('summaryErrorMessage');
+        });
+    });
+
+    it('should return transcription with completed summary', async () => {
+      const transcribedText = 'This is a test transcription';
+      const summaryText = 'This is a test summary';
+      
+      // Update file with completed transcription and summary
+      await connection.collection('mediafiles').updateOne(
+        { _id: new Types.ObjectId(fileId) },
+        { 
+          $set: { 
+            status: 'completed', 
+            progress: 100,
+            transcribedText,
+            summaryText,
+            summaryStatus: 'completed'
+          } 
+        }
+      );
+
+      return request(app.getHttpServer())
+        .get(`/media/${fileId}/transcription`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200)
+        .expect((res) => {
+          expect(res.body).toHaveProperty('status', 'completed');
+          expect(res.body).toHaveProperty('transcription', transcribedText);
+          expect(res.body).toHaveProperty('summaryText', summaryText);
+          expect(res.body).toHaveProperty('summaryStatus', 'completed');
+          expect(res.body).not.toHaveProperty('summaryErrorMessage');
+        });
+    });
+
+    it('should return transcription with pending summary', async () => {
+      const transcribedText = 'This is a test transcription';
+      
+      // Update file with completed transcription and pending summary
+      await connection.collection('mediafiles').updateOne(
+        { _id: new Types.ObjectId(fileId) },
+        { 
+          $set: { 
+            status: 'completed', 
+            progress: 100,
+            transcribedText,
+            summaryStatus: 'pending'
+          },
+          $unset: {
+            summaryText: '',
+            summaryErrorMessage: ''
+          }
+        }
+      );
+
+      return request(app.getHttpServer())
+        .get(`/media/${fileId}/transcription`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200)
+        .expect((res) => {
+          expect(res.body).toHaveProperty('status', 'completed');
+          expect(res.body).toHaveProperty('transcription', transcribedText);
+          expect(res.body).toHaveProperty('summaryStatus', 'pending');
+          expect(res.body).not.toHaveProperty('summaryText');
+        });
+    });
+
+    it('should return transcription with processing summary', async () => {
+      const transcribedText = 'This is a test transcription';
+      
+      // Update file with completed transcription and processing summary
+      await connection.collection('mediafiles').updateOne(
+        { _id: new Types.ObjectId(fileId) },
+        { 
+          $set: { 
+            status: 'completed', 
+            progress: 100,
+            transcribedText,
+            summaryStatus: 'processing'
+          },
+          $unset: {
+            summaryText: '',
+            summaryErrorMessage: ''
+          }
+        }
+      );
+
+      return request(app.getHttpServer())
+        .get(`/media/${fileId}/transcription`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200)
+        .expect((res) => {
+          expect(res.body).toHaveProperty('status', 'completed');
+          expect(res.body).toHaveProperty('transcription', transcribedText);
+          expect(res.body).toHaveProperty('summaryStatus', 'processing');
+          expect(res.body).not.toHaveProperty('summaryText');
+        });
+    });
+
+    it('should return transcription with summary error', async () => {
+      const transcribedText = 'This is a test transcription';
+      const summaryErrorMessage = 'Summarization service unavailable';
+      
+      // Update file with completed transcription and summary error
+      await connection.collection('mediafiles').updateOne(
+        { _id: new Types.ObjectId(fileId) },
+        { 
+          $set: { 
+            status: 'completed', 
+            progress: 100,
+            transcribedText,
+            summaryStatus: 'error',
+            summaryErrorMessage
+          },
+          $unset: {
+            summaryText: ''
+          }
+        }
+      );
+
+      return request(app.getHttpServer())
+        .get(`/media/${fileId}/transcription`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200)
+        .expect((res) => {
+          expect(res.body).toHaveProperty('status', 'completed');
+          expect(res.body).toHaveProperty('transcription', transcribedText);
+          expect(res.body).toHaveProperty('summaryStatus', 'error');
+          expect(res.body).toHaveProperty('summaryErrorMessage', summaryErrorMessage);
+          expect(res.body).not.toHaveProperty('summaryText');
         });
     });
 
