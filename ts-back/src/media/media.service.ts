@@ -181,6 +181,9 @@ export class MediaService {
     message?: string;
     fileId?: string;
     originalFilename?: string;
+    summaryText?: string;
+    summaryStatus?: string;
+    summaryErrorMessage?: string;
   }> {
     const file = await this.findById(id);
     
@@ -221,6 +224,9 @@ export class MediaService {
       transcription: file.transcribedText,
       fileId: file._id.toString(),
       originalFilename: file.originalFilename,
+      summaryText: file.summaryText,
+      summaryStatus: file.summaryStatus,
+      summaryErrorMessage: file.summaryErrorMessage,
     };
   }
 

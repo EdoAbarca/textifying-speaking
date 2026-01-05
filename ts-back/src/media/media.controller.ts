@@ -97,6 +97,9 @@ export class MediaController {
         progress: file.progress,
         errorMessage: file.errorMessage,
         transcribedText: file.transcribedText,
+        summaryText: file.summaryText,
+        summaryStatus: file.summaryStatus,
+        summaryErrorMessage: file.summaryErrorMessage,
       })),
     };
   }
