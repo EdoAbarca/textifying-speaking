@@ -190,6 +190,60 @@
   - Error messages captured and displayed to users
   - Complete integration with existing real-time update infrastructure
 
+- **View Summary Alongside Transcription (US-11)**: Compare and review transcription with summary side-by-side
+  - Enhanced modal dialog with side-by-side layout for transcription and summary
+  - GET `/media/:id/transcription` endpoint returns both transcription and summary data
+  - Side-by-side comparison view:
+    - Left panel: Full transcription with indigo theme
+    - Right panel: AI-generated summary with purple theme
+    - Independent scrolling for each panel
+    - Copy-to-clipboard buttons for both transcription and summary
+  - Status-aware summary display:
+    - **Completed**: Shows generated summary with copy functionality
+    - **Processing**: Animated spinner with "Summary in progress..." message
+    - **Pending**: Clock icon with suggestion to click "Summarize" button
+    - **Error**: Alert icon with error message details
+    - **Not started**: Placeholder with instructions to generate summary
+  - Real-time updates when summary becomes ready:
+    - WebSocket integration automatically updates modal
+    - No page refresh required
+    - Toast notifications on status changes
+    - Smooth UI transitions between states
+  - Enhanced API response format:
+    ```json
+    {
+      "status": "completed",
+      "transcription": "Full transcribed text...",
+      "summaryText": "AI-generated summary...",
+      "summaryStatus": "completed",
+      "fileId": "...",
+      "originalFilename": "..."
+    }
+    ```
+  - Responsive design:
+    - Desktop: Two-column side-by-side layout
+    - Tablet/Mobile: Single-column stacked layout (future enhancement)
+    - Maximum viewport height (90vh) with scrollable content
+  - File ownership validation (403 if unauthorized)
+  - Integrated with existing Dashboard:
+    - "View Text" button opens new side-by-side modal
+    - Summary modal deprecated in favor of unified view
+    - Consistent styling with existing UI components
+  - Enhanced user experience:
+    - Clear visual distinction between transcription and summary
+    - Status indicators prevent confusion about summary availability
+    - Automatic updates keep displayed content synchronized
+    - File metadata displayed in modal header
+  - Supports all transcription/summary states:
+    - File not yet transcribed: Shows appropriate message
+    - Transcription in progress: Displays progress information
+    - Transcription completed, summary not started: Shows transcription with prompt to summarize
+    - Both completed: Full side-by-side comparison view
+  - Performance optimized:
+    - Lazy loading of summary text
+    - Efficient WebSocket message handling
+    - Minimal re-renders on status updates
+
 
 ## Tech Stack
 
@@ -615,7 +669,7 @@ curl -X POST http://localhost:3001/media/507f1f77bcf86cd799439011/transcribe \
 - Automatic chunking for long audio (30-second chunks)
 
 #### GET `/media/:id/transcription`
-Retrieve the transcription text for a transcribed file.
+Retrieve the transcription text and summary (if available) for a transcribed file.
 
 **Authentication:** Required (Bearer JWT token)
 
@@ -628,13 +682,49 @@ curl -X GET http://localhost:3001/media/507f1f77bcf86cd799439011/transcription \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
-**Success Response (200) - Completed File:**
+**Success Response (200) - Completed File with Summary:**
 ```json
 {
   "status": "completed",
   "transcription": "This is the transcribed text from the audio file...",
   "fileId": "507f1f77bcf86cd799439011",
-  "originalFilename": "audio.mp3"
+  "originalFilename": "audio.mp3",
+  "summaryText": "AI-generated summary of the transcription...",
+  "summaryStatus": "completed"
+}
+```
+
+**Success Response (200) - Completed File with Pending Summary:**
+```json
+{
+  "status": "completed",
+  "transcription": "This is the transcribed text from the audio file...",
+  "fileId": "507f1f77bcf86cd799439011",
+  "originalFilename": "audio.mp3",
+  "summaryStatus": "pending"
+}
+```
+
+**Success Response (200) - Completed File with Processing Summary:**
+```json
+{
+  "status": "completed",
+  "transcription": "This is the transcribed text from the audio file...",
+  "fileId": "507f1f77bcf86cd799439011",
+  "originalFilename": "audio.mp3",
+  "summaryStatus": "processing"
+}
+```
+
+**Success Response (200) - Completed File with Summary Error:**
+```json
+{
+  "status": "completed",
+  "transcription": "This is the transcribed text from the audio file...",
+  "fileId": "507f1f77bcf86cd799439011",
+  "originalFilename": "audio.mp3",
+  "summaryStatus": "error",
+  "summaryErrorMessage": "Summarization service unavailable"
 }
 ```
 
@@ -672,22 +762,27 @@ curl -X GET http://localhost:3001/media/507f1f77bcf86cd799439011/transcription \
 **Behavior:**
 - Validates file ownership before returning transcription
 - Returns different responses based on file status:
-  - `completed`: Returns full transcription text with file metadata
+  - `completed`: Returns full transcription text with file metadata and summary data (if available)
   - `processing`: Returns progress percentage and status message
   - `error`: Returns error message from failed transcription
   - `ready`/`uploading`: Returns message indicating transcription hasn't started
-- Only the file owner can retrieve transcription (enforces data privacy)
+- Summary fields included in response when transcription is completed:
+  - `summaryText`: The generated summary (only if summaryStatus is 'completed')
+  - `summaryStatus`: Current status of summarization (pending, processing, completed, error, or undefined)
+  - `summaryErrorMessage`: Error details if summarization failed
+- Only the file owner can retrieve transcription and summary (enforces data privacy)
 
 **Use Cases:**
-- Display transcribed text in UI after completion
-- Check transcription status without fetching full file details
-- Implement "View Transcription" feature in frontend
+- Display transcribed text and summary side-by-side in UI after completion
+- Check transcription and summary status without fetching full file details
+- Implement "View Transcription & Summary" feature in frontend (US-11)
 - Poll for completion status (though WebSockets are preferred for real-time updates)
 
 **Best Practices:**
 - Use WebSocket events for real-time status updates instead of polling this endpoint
-- This endpoint is ideal for retrieving transcription after page reload or direct navigation
+- This endpoint is ideal for retrieving transcription and summary after page reload or direct navigation
 - Handle all status responses gracefully in UI (show spinner for processing, error message for errors, etc.)
+- Display summary status indicators (pending, processing, completed, error) when showing transcription
 
 
 ## Project Structure
