@@ -406,6 +406,103 @@ describe('MediaService', () => {
       expect(result.transcription).toBe(transcribedText);
       expect(result.fileId).toBe(fileId);
       expect(result.originalFilename).toBe(completedFile.originalFilename);
+      expect(result.summaryText).toBeUndefined();
+      expect(result.summaryStatus).toBeUndefined();
+      expect(result.summaryErrorMessage).toBeUndefined();
+    });
+
+    it('should return transcription with completed summary', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+      const transcribedText = 'This is the transcribed text';
+      const summaryText = 'This is the summary';
+      const completedFile = { 
+        ...mockMediaFile, 
+        status: 'completed',
+        transcribedText,
+        summaryText,
+        summaryStatus: 'completed',
+      };
+      
+      mockMediaFileModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(completedFile),
+      });
+
+      const result = await service.getTranscription(fileId);
+
+      expect(result.status).toBe('completed');
+      expect(result.transcription).toBe(transcribedText);
+      expect(result.summaryText).toBe(summaryText);
+      expect(result.summaryStatus).toBe('completed');
+      expect(result.summaryErrorMessage).toBeUndefined();
+    });
+
+    it('should return transcription with pending summary', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+      const transcribedText = 'This is the transcribed text';
+      const completedFile = { 
+        ...mockMediaFile, 
+        status: 'completed',
+        transcribedText,
+        summaryStatus: 'pending',
+      };
+      
+      mockMediaFileModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(completedFile),
+      });
+
+      const result = await service.getTranscription(fileId);
+
+      expect(result.status).toBe('completed');
+      expect(result.transcription).toBe(transcribedText);
+      expect(result.summaryStatus).toBe('pending');
+      expect(result.summaryText).toBeUndefined();
+    });
+
+    it('should return transcription with processing summary', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+      const transcribedText = 'This is the transcribed text';
+      const completedFile = { 
+        ...mockMediaFile, 
+        status: 'completed',
+        transcribedText,
+        summaryStatus: 'processing',
+      };
+      
+      mockMediaFileModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(completedFile),
+      });
+
+      const result = await service.getTranscription(fileId);
+
+      expect(result.status).toBe('completed');
+      expect(result.transcription).toBe(transcribedText);
+      expect(result.summaryStatus).toBe('processing');
+      expect(result.summaryText).toBeUndefined();
+    });
+
+    it('should return transcription with summary error', async () => {
+      const fileId = '507f1f77bcf86cd799439011';
+      const transcribedText = 'This is the transcribed text';
+      const summaryErrorMessage = 'Summarization service unavailable';
+      const completedFile = { 
+        ...mockMediaFile, 
+        status: 'completed',
+        transcribedText,
+        summaryStatus: 'error',
+        summaryErrorMessage,
+      };
+      
+      mockMediaFileModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(completedFile),
+      });
+
+      const result = await service.getTranscription(fileId);
+
+      expect(result.status).toBe('completed');
+      expect(result.transcription).toBe(transcribedText);
+      expect(result.summaryStatus).toBe('error');
+      expect(result.summaryErrorMessage).toBe(summaryErrorMessage);
+      expect(result.summaryText).toBeUndefined();
     });
 
     it('should return processing status with progress for processing file', async () => {
